@@ -90,3 +90,9 @@ visitor at the doorbell, smoke, gas leak, water leak and SOS.
 - The phone app follows the general layout of a smart-home app (home, rooms, device tiles, scenes,
   automation, security). It is not a copy of ORVIBO's own app artwork.
 - ORVIBO, MixPad, MixSwitch and SOPRO are trademarks of their respective owner.
+
+## Offline edition (no server needed)
+
+The `standalone/` folder holds a single-file build: double-click
+`ORVIBO Smart Home Simulator.html` to run it straight from disk. The two `Setup - Create Desktop Icon`
+scripts add a desktop shortcut with the app icon on Windows, macOS or Linux.

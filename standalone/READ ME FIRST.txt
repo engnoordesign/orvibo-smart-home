@@ -1,0 +1,16 @@
+DIGITAL HOME - ORVIBO SMART LIVING SIMULATOR (offline edition)
+
+RUN IT NOW
+  Double-click "ORVIBO Smart Home Simulator.html".
+  It opens in your browser (Chrome or Edge recommended). No installation, no internet.
+
+SET UP A DESKTOP ICON
+  Windows:    double-click "Setup - Create Desktop Icon (Windows).bat"
+  Mac/Linux:  double-click "Setup - Create Desktop Icon (Mac-Linux).command"
+  Afterwards start the simulator from the icon on your Desktop.
+
+Keep all files of this folder together; the desktop icon points to this folder.
+
+CONTROLS
+  W A S D walk | Mouse look | E use | Q inspect / choose model | Tab phone app
+  C cameras | P ray-traced photo | X disarm alarm | H help
