@@ -116,7 +116,7 @@ export function B(w, h, d, mat, x, y, z, o = {}) {
   m.position.set(x, y, z);
   m.castShadow = o.cast !== false; m.receiveShadow = o.recv !== false;
   (o.parent || scene).add(m);
-  if (o.collide) colliders.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 });
+  if (o.collide) colliders.push({ x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, wall: !!o.wall, sill: !!o.sill });
   if (o.occ) occluders.push(m);
   return m;
 }
@@ -140,7 +140,7 @@ function floor(x0, z0, x1, z1, tex, scale, extra = {}) {
 function wall(axis, at, s0, s1, ops = [], t = 0.16, mat = M.wall) {
   const seg = (a, b, y0, y1) => {
     if (b - a < 0.01 || y1 - y0 < 0.01) return;
-    const o = { collide: y0 < 1.0, occ: true };
+    const o = { collide: y0 < 1.0, occ: true, wall: y0 === 0 && y1 === H, sill: !(y0 === 0 && y1 === H) };
     if (axis === 'x') B(b - a, y1 - y0, t, mat, (a + b) / 2, (y0 + y1) / 2, at, o);
     else B(t, y1 - y0, b - a, mat, at, (y0 + y1) / 2, (a + b) / 2, o);
   };
@@ -172,6 +172,24 @@ export function makeWindow(axis, at, a, b, y0, y1, glass = M.glass) {
   mk((a + mid) / 2, -0.02);
   const slide = mk((mid + b) / 2, 0.02);
   return { slide, axis, travel: -(half + w * 0.4), base: axis === 'x' ? slide.position.x : slide.position.z, center: [axis === 'x' ? (mid + b) / 2 : at, yc, axis === 'x' ? at : (mid + b) / 2] };
+}
+
+// Nearest full-height wall face to a point: used to mount items the user places on the plan.
+export function nearestWall(x, z) {
+  let best = null;
+  for (const c of colliders) {
+    if (!c.wall) continue;
+    const nx = clamp(x, c.x0, c.x1), nz = clamp(z, c.z0, c.z1), dx = x - nx, dz = z - nz, d = Math.hypot(dx, dz);
+    if (d < 0.02 || (best && d >= best.d)) continue;
+    const horiz = Math.abs(dx) > Math.abs(dz);
+    best = { d, x: horiz ? nx + Math.sign(dx) * 0.006 : clamp(x, c.x0 + 0.1, c.x1 - 0.1), z: horiz ? clamp(z, c.z0 + 0.1, c.z1 - 0.1) : nz + Math.sign(dz) * 0.006, facing: horiz ? (dx > 0 ? 'e' : 'w') : (dz > 0 ? 's' : 'n') };
+  }
+  return best;
+}
+// Static geometry never moves: freezing its matrices saves per-frame work.
+export function freezeStatic() {
+  scene.updateMatrixWorld(true);
+  scene.traverse(o => { if (o.isMesh || o.isGroup) { o.matrixAutoUpdate = false; } });
 }
 
 // ---------- sky, sun, city ----------

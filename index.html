@@ -20,20 +20,21 @@
   <div id="prompt"></div>
   <div id="quests"></div>
   <canvas id="minimap" width="250" height="215"></canvas>
-  <div id="keys"><b>WASD</b> move · <b>Shift</b> run · <b>E</b> use · <b>Q</b> inspect / choose model · <b>Tab</b> phone app · <b>C</b> cameras · <b>P</b> ray-traced photo · <b>X</b> disarm · <b>H</b> help</div>
+  <div id="keys"><b>WASD</b> move · <b>Shift</b> run · <b>E</b> use · <b>Q</b> inspect / choose model · <b>Tab</b> phone app · <b>F</b> control centre · <b>C</b> cameras · <b>P</b> ray-traced photo · <b>X</b> disarm · <b>H</b> help</div>
   <div id="alarm" class="hidden"></div>
   <div id="pip" class="hidden"><div id="pip-label"></div><div id="pip-btns"></div></div>
   <div id="toasts"></div>
   <div id="touch">
     <div id="stick"><div id="knob"></div></div>
-    <button data-t="use">USE</button><button data-t="info">INFO</button><button data-t="app">APP</button><button data-t="cam">CAM</button>
+    <button data-t="use">USE</button><button data-t="info">INFO</button><button data-t="app">APP</button><button data-t="cam">CAM</button><button data-t="map">MAP</button>
   </div>
 </div>
 
 <div id="cctv" class="hidden">
-  <div class="cam" data-i="0"></div><div class="cam" data-i="1"></div><div class="cam" data-i="2"></div><div class="cam" data-i="3"></div>
   <div id="cctv-bar"><span>● LIVE · ORVIBO Smart Cameras</span><button id="cctv-close">Close (C)</button></div>
 </div>
+
+<div id="plan" class="hidden"><div id="plan-top"></div><div id="plan-main"><div id="plan-map"></div><div id="plan-side"></div></div></div>
 
 <div id="device" class="hidden"><div id="frame"><div id="notch"></div><div id="app"></div><div id="tabs"></div></div><button id="device-close">Close (Tab)</button></div>
 <div id="lockui" class="hidden"></div>
@@ -47,7 +48,7 @@
     <p>Step into apartment A·1204. Unlock the door with your fingerprint, then control lighting, climate, curtains, music, TV and security by hand, from the MixPad or from the app — and see how the home reacts on its own.</p>
     <div class="grid">
       <div><b>W A S D</b><span>walk</span></div><div><b>Mouse</b><span>look</span></div><div><b>E / click</b><span>use device</span></div>
-      <div><b>Q</b><span>inspect &amp; pick model</span></div><div><b>Tab</b><span>phone app</span></div><div><b>C</b><span>security cameras</span></div><div><b>P</b><span>ray-traced photo</span></div><div><b>X</b><span>disarm alarm</span></div><div><b>H</b><span>help</span></div>
+      <div><b>Q</b><span>inspect &amp; pick model</span></div><div><b>Tab</b><span>phone app</span></div><div><b>F</b><span>control centre (2D)</span></div><div><b>C</b><span>security cameras</span></div><div><b>P</b><span>ray-traced photo</span></div><div><b>X</b><span>disarm alarm</span></div>
     </div>
     <button id="enter" disabled>Loading…</button>
     <label class="chk"><input type="checkbox" id="opt-tour" checked> Guided tour (objectives)</label>

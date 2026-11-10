@@ -64,13 +64,18 @@ export function changed() {
 export function set(id, patch, src = 'app') {
   const d = home.devices[id];
   if (!d) { console.warn('unknown device', id); return; }
+  // A device that is not installed in this project is invisible to the smart system:
+  // physical changes (a window opened by hand) still happen, but nothing is reported.
+  if (d.installed === false) { if (src === 'hand' || src === 'sim' || src === 'sensor') Object.assign(d.state, patch); return; }
   const prev = { ...d.state };
   Object.assign(d.state, patch);
   bus.emit('device', { id, d, patch, prev, src });
   changed();
 }
 export const dev = id => home.devices[id];
-export const ofType = t => Object.values(home.devices).filter(d => d.type === t);
+export const ofType = (t, all) => Object.values(home.devices).filter(d => d.type === t && (all || d.installed !== false));
+export const has = id => !!home.devices[id] && home.devices[id].installed !== false;
+export const installed = () => Object.values(home.devices).filter(d => d.installed !== false);
 
 export function log(text, level = 'info') {
   home.log.unshift({ t: fmtTime(), text, level });

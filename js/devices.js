@@ -1,8 +1,8 @@
 // Every smart device in the apartment: 3D model, live state, hand interaction and animation.
 import * as THREE from 'three';
-import { scene, B, C, M, H, interactables, colliders, updaters, dirty, canvasTex, makeWindow, rnd, hideInPhoto } from './world.js';
+import { scene, B, C, M, H, interactables, colliders, updaters, dirty, canvasTex, makeWindow, rnd, hideInPhoto, nearestWall } from './world.js';
 export const bounceLights = [];
-import { bus, home, set, dev, log, notify, fmtTime, clamp, ROOMS } from './state.js';
+import { bus, home, set, dev, log, notify, fmtTime, clamp, ROOMS, roomAt, ofType, changed } from './state.js';
 import { CATALOG, modelOf } from './catalog.js';
 import { audio } from './audio.js';
 import { runScene, unlockAttempt, pressSOS, music } from './sim.js';
@@ -14,8 +14,11 @@ const tmpC = new THREE.Color();
 function reg(id, type, room, name, state, extra = {}) {
   const cat = extra.cat || type;
   const d = { id, type, cat, room, name, state, model: CATALOG[cat]?.models[0].id, ...extra };
-  home.devices[id] = d; return d;
+  home.devices[id] = d; lastReg = d; return d;
 }
+let lastReg = null;
+// Wraps a builder so every 3D object it adds is remembered on the device (used to add / remove items from a project).
+const tracked = fn => (...a) => { const n = scene.children.length; lastReg = null; const d = fn(...a) || lastReg; if (d) (d.objs ??= []).push(...scene.children.slice(n)); return d; };
 function it(mesh, d, label, act) {
   mesh.userData.it = { dev: d, label, act: act || (() => bus.emit('inspect', d)) };
   interactables.push(mesh); return mesh;
@@ -67,7 +70,7 @@ function addLight(id, room, name, kind, cfg) {
   d.cur = 0; d.col = kelvin(d.state.cct); d.power = 0; const phase = rnd();
   d.applyModel = m => { if (m.color != null) trim.color.set(m.color); };
   updaters.push((dt, t) => {
-    const s = d.state, al = home.security.alarm; let tgt = s.on ? s.bri / 100 : 0, rate = dt / Math.max(0.05, performance.now() < (d.quick || 0) ? 0.15 : s.fade), cs = 4;
+    const s = d.state, al = d.installed === false ? null : home.security.alarm; let tgt = s.on && d.installed !== false ? s.bri / 100 : 0, rate = dt / Math.max(0.05, performance.now() < (d.quick || 0) ? 0.15 : s.fade), cs = 4;
     if (s.rgb) tmpC.set(s.rgb); else kelvin(s.cct, tmpC);
     if (al && al.siren) {
       rate = 1; cs = 30;
@@ -107,8 +110,8 @@ function addSwitch(id, room, name, pos, facing, btns) {
 }
 
 // ---------------- MixPad ----------------
-function addMixPad(id, room, name, pos, facing) {
-  const d = reg(id, 'mixpad', room, name, {}, { pos: new THREE.Vector3(...pos) });
+function addMixPad(id, room, name, pos, facing, model) {
+  const d = reg(id, 'mixpad', room, name, {}, { pos: new THREE.Vector3(...pos) }); if (model) d.model = model;
   const g = wallGroup(...pos, facing), bodyMat = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.2, metalness: 0.6 });
   const body = lb(g, 1, 1, 0.016, bodyMat, 0, 0, 0.008);
   const cv = document.createElement('canvas'); cv.width = 512; cv.height = 320; const c = cv.getContext('2d');
@@ -221,18 +224,19 @@ function addEntry() {
     flash = Math.max(0, flash - dt);
     pad.emissive.set(flash > 0 ? flashCol : home.security.lockFreeze > 0 ? 0xff3030 : 0x3aa0ff); pad.emissiveIntensity = flash > 0 ? 4 : 1.2;
   });
+  return d;
 }
 
 // ---------------- sensors ----------------
-function addPresence(room, x, z) {
-  const d = reg('pr_' + room, 'presence', room, 'Presence sensor', { present: false }, { pos: new THREE.Vector3(x, H, z) });
+function addPresence(room, x, z, id = 'pr_' + room, name = 'Presence sensor', model, y = H) {
+  const H = y, d = reg(id, 'presence', room, name, { present: false }, { pos: new THREE.Vector3(x, H, z) }); if (model) d.model = model;
   const led = glow(0x30a0ff, 0.6);
-  it(C(0.05, 0.022, M.plastic, x, H - 0.011, z, { cast: false }), d, () => `Presence sensor — ${d.state.present ? 'occupied' : 'vacant'}`);
+  it(C(0.05, 0.022, M.plastic, x, H - 0.011, z, { cast: false }), d, () => `${name} — ${d.state.present ? 'occupied' : 'vacant'}`);
   C(0.012, 0.006, led, x, H - 0.025, z, { cast: false });
   updaters.push(() => { led.emissive.set(d.state.present ? 0x30ff70 : 0x3070ff); led.emissiveIntensity = d.state.present ? 3 : 0.5; });
 }
-function addClimate(room, pos, facing) {
-  const d = reg('th_' + room, 'climate', room, 'Temp & humidity sensor', { temp: 0, hum: 0 }, { pos: new THREE.Vector3(...pos) });
+function addClimate(room, pos, facing, id = 'th_' + room) {
+  const d = reg(id, 'climate', room, 'Temp & humidity sensor', { temp: 0, hum: 0 }, { pos: new THREE.Vector3(...pos) });
   const g = wallGroup(...pos, facing); const m = lb(g, 0.065, 0.065, 0.018, M.plastic, 0, 0, 0.009); lb(g, 0.04, 0.025, 0.002, M.dark, 0, 0.008, 0.019);
   it(m, d, () => `Temp & humidity — ${d.state.temp.toFixed(1)} °C · ${d.state.hum.toFixed(0)} %`);
 }
@@ -303,7 +307,8 @@ function addSpeaker(id, room, name, pos, artist, extra = []) {
 }
 
 // ---------------- TV ----------------
-const CH = ['News 24', 'Planet Earth', 'Sports Live', 'Cinema'];
+const CH = ['News 24', 'Planet Earth', 'Sports Live', 'Cinema', '📷 Security cameras'];
+export const TV_CAM = 4;
 function drawTV(g, w, h, ch, t) {
   if (ch === 0) {
     g.fillStyle = '#12305a'; g.fillRect(0, 0, w, h); g.fillStyle = '#1d4a8a'; g.fillRect(0, 0, w, h * 0.72);
@@ -339,9 +344,12 @@ function addTV(id, room, name, pos, facing, w) {
   let acc = 0, was = false;
   updaters.push((dt, t) => {
     if (!d.state.on) { if (was) { mat.map = null; mat.color.set(0x050505); mat.needsUpdate = true; p.intensity = 0; was = false; } return; }
-    if (!was) { mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true; was = true; }
+    // channel 4 shows the live camera wall rendered by the main loop (home.camTex)
+    const want = d.state.ch === TV_CAM && home.camTex ? home.camTex : tex;
+    if (!was || mat.map !== want) { mat.map = want; mat.color.set(0xffffff); mat.needsUpdate = true; was = true; }
+    if (want !== tex) { p.intensity = 1.2; p.color.set(0xbfd0ff); return; }
     acc += dt; if (acc < 0.08) return; acc = 0; drawTV(c, 480, 270, d.state.ch, t); tex.needsUpdate = true;
-    p.intensity = 1.6 + Math.sin(t * 7) * 0.3 + Math.sin(t * 13) * 0.2; p.color.set([0x7799ff, 0xffa070, 0x70ff90, 0xaa80ff][d.state.ch]);
+    p.intensity = 1.6 + Math.sin(t * 7) * 0.3 + Math.sin(t * 13) * 0.2; p.color.set([0x7799ff, 0xffa070, 0x70ff90, 0xaa80ff][d.state.ch] || 0xbfd0ff);
   });
 }
 
@@ -390,6 +398,24 @@ function addShower() {
   });
 }
 
+addLight = tracked(addLight);
+addSwitch = tracked(addSwitch);
+addMixPad = tracked(addMixPad);
+addCurtain = tracked(addCurtain);
+addContact = tracked(addContact);
+addWindow = tracked(addWindow);
+addEntry = tracked(addEntry);
+addPresence = tracked(addPresence);
+addClimate = tracked(addClimate);
+addSOS = tracked(addSOS);
+addHazard = tracked(addHazard);
+addRelay = tracked(addRelay);
+addCamera = tracked(addCamera);
+addSpeaker = tracked(addSpeaker);
+addTV = tracked(addTV);
+addAC = tracked(addAC);
+addShower = tracked(addShower);
+
 // ---------------- placement ----------------
 export function buildDevices() {
   // SOPRO lighting
@@ -415,6 +441,7 @@ export function buildDevices() {
   // MixPad panels & MixSwitches
   addMixPad('mp_liv', 'living', 'Living MixPad', [6.915, 1.42, 8.35], 'w');
   addMixPad('mp_mas', 'master', 'Master MixPad', [7.085, 1.42, 5.8], 'e');
+  addMixPad('mp_x', 'living', 'Living MixPad X (home hub)', [6.915, 1.47, 5.95], 'w', 'X');
   addSwitch('sw_entry', 'living', 'Entry scene switch', [6.915, 1.42, 8.0], 'w', [{ label: 'Welcome Home scene', scene: 'welcome' }, { label: 'Leave Home scene', scene: 'leave' }]);
   addSwitch('sw_liv', 'living', 'Living MixSwitch', [6.35, 1.35, 4.085], 's', [{ label: 'Downlights', lights: ['l_liv_down', 'l_entry'] }, { label: 'Spotlights', light: 'l_liv_spot' }, { label: 'Shadow-line strip', light: 'l_liv_strip' }]);
   addSwitch('sw_kit', 'kitchen', 'Kitchen MixSwitch', [3.915, 1.35, 3.6], 'w', [{ label: 'Downlights', light: 'l_kit_down' }, { label: 'Island pendants', light: 'l_kit_pend' }, { label: 'Under-cabinet strip', light: 'l_kit_strip' }]);
@@ -438,6 +465,10 @@ export function buildDevices() {
   addSOS('sos_mas', 'master', [10.9, 0.95, 8.845], 'n'); addSOS('sos_bath', 'bath', [11.885, 0.95, 2.7], 'w');
   addHazard('hz_smoke', 'kitchen', 'Smoke sensor', [2.0, H, 1.2], 'smoke'); addHazard('hz_gas', 'kitchen', 'Gas sensor', [0.3, 1.5, 0.13], 'gas'); addHazard('hz_leak', 'bath', 'Water-leak sensor', [8.75, 0, 2.7], 'leak');
   addRelay('fan_bath', 'bath', 'Exhaust fan', [10.9, H, 1.0], false, 'fan'); addRelay('valve_gas', 'kitchen', 'Gas valve', [1.2, 1.12, 0.14], true); addRelay('valve_water', 'bath', 'Water valve', [8.14, 0.35, 2.55], true);
+  // extra safety & perimeter sensors
+  addPresence('balcony', -0.14, 6.5, 'pr_balcony', 'Outdoor motion sensor', 'PIR', 2.5);
+  addHazard('hz_smoke_liv', 'living', 'Smoke sensor', [4.7, H, 6.9], 'smoke'); addHazard('hz_smoke_mas', 'master', 'Smoke sensor', [9.5, H, 5.5], 'smoke');
+  addHazard('hz_leak_kit', 'kitchen', 'Water-leak sensor', [2.2, 0, 0.86], 'leak'); addSOS('sos_bed', 'bedroom', [7.915, 0.95, 1.05], 'w');
   addShower();
 
   // cameras
@@ -455,6 +486,56 @@ export function buildDevices() {
   // TV + climate
   addTV('tv_liv', 'living', 'Living TV', [2.6, 1.5, 8.79], 'n', 1.65); addTV('tv_mas', 'master', 'Master TV', [9.3, 1.45, 4.085], 's', 1.2);
   addAC('ac_liv', 'living', 'Living AC', [6.92, 2.5, 6.9], 'w'); addAC('ac_bed', 'bedroom', 'Bedroom AC', [7.92, 2.5, 2.9], 'w'); addAC('ac_mas', 'master', 'Master AC', [11.0, 2.5, 4.085], 's');
+}
+
+// ---- project customisation: remove / restore / add items ----
+export function setInstalled(d, on) {
+  d.installed = on; (d.objs || []).forEach(o => { if (!o.isLight) o.visible = on; });
+  if (!on) { if ('on' in d.state && d.type !== 'relay') d.state.on = false; if (d.type === 'presence') d.state.present = false; if (d.type === 'camera') d.state.rec = false; }
+  bus.emit('layout'); changed();
+}
+const ADDABLE = {
+  presence: { label: 'Presence sensor', icon: '🧍', mount: 'ceiling' }, pir: { label: 'Motion sensor (PIR)', icon: '🏃', mount: 'ceiling' },
+  climate: { label: 'Temp & humidity sensor', icon: '🌡️', mount: 'wall', y: 1.5 }, sos: { label: 'Emergency button', icon: '🆘', mount: 'wall', y: 0.95 },
+  smoke: { label: 'Smoke sensor', icon: '🔥', mount: 'ceiling' }, leak: { label: 'Water-leak sensor', icon: '💧', mount: 'floor' },
+  camera: { label: 'Smart camera', icon: '📷', mount: 'wall', y: 2.5 }, mixpad: { label: 'MixPad panel', icon: '📱', mount: 'wall', y: 1.42 },
+  mixpadx: { label: 'MixPad X', icon: '🖥️', mount: 'wall', y: 1.47 }, switch: { label: 'MixSwitch', icon: '🔘', mount: 'wall', y: 1.35 },
+  speaker: { label: 'Ceiling speaker', icon: '🔊', mount: 'ceiling' },
+};
+export { ADDABLE };
+let customN = 0;
+// Place a new item where the user clicked on the plan. Wall items snap to the nearest wall.
+export function addCustom(spec) {
+  const a = ADDABLE[spec.kind]; if (!a) return null;
+  let { x, z } = spec, facing = spec.facing, w = null;
+  if (a.mount === 'wall') {
+    w = nearestWall(x, z); if (!w || w.d > 3) return null;
+    x = w.x; z = w.z; facing = w.facing;
+  }
+  const n = { e: [0.3, 0], w: [-0.3, 0], s: [0, 0.3], n: [0, -0.3] }[facing] || [0, 0];
+  const room = roomAt(x + n[0], z + n[1]); if (!room || room === 'corridor' || (room === 'balcony' && !['pir', 'camera'].includes(spec.kind))) return null;
+  const id = spec.id || `x_${spec.kind}_${Date.now().toString(36)}${customN++}`, R = ROOMS[room].rect, rn = ROOMS[room].name;
+  let d;
+  switch (spec.kind) {
+    case 'presence': d = addPresence(room, x, z, id, 'Presence sensor'); break;
+    case 'pir': d = addPresence(room, x, z, id, 'Motion sensor', 'PIR', room === 'balcony' ? 2.5 : H); break;
+    case 'climate': d = addClimate(room, [x, a.y, z], facing, id); break;
+    case 'sos': d = addSOS(id, room, [x, a.y, z], facing); break;
+    case 'smoke': d = addHazard(id, room, 'Smoke sensor', [x, H, z], 'smoke'); break;
+    case 'leak': d = addHazard(id, room, 'Water-leak sensor', [x, 0, z], 'leak'); break;
+    case 'camera': d = addCamera(id, room, `${rn} (added)`, [x + n[0] * 0.5, a.y, z + n[1] * 0.5], [(R[0] + R[2]) / 2, 0.9, (R[1] + R[3]) / 2], room === 'balcony'); break;
+    case 'mixpad': d = addMixPad(id, room, `${rn} MixPad`, [x, a.y, z], facing); break;
+    case 'mixpadx': d = addMixPad(id, room, `${rn} MixPad X`, [x, a.y, z], facing, 'X'); break;
+    case 'switch': {
+      const ls = ofType('light').filter(l => l.room === room).slice(0, 3);
+      d = addSwitch(id, room, `${rn} MixSwitch`, [x, a.y, z], facing, ls.length ? ls.map(l => ({ label: l.name, light: l.id })) : [{ label: 'Welcome Home scene', scene: 'welcome' }, { label: 'Leave Home scene', scene: 'leave' }]); break;
+    }
+    case 'speaker': d = addSpeaker(id, room, `${rn} ceiling speaker`, [x, H, z]); break;
+  }
+  if (!d) return null;
+  d.custom = { kind: spec.kind, x: spec.x, z: spec.z, id };
+  if (spec.model && CATALOG[d.cat]?.models.some(m => m.id === spec.model)) { d.model = spec.model; d.applyModel?.(modelOf(d)); }
+  bus.emit('layout'); changed(); return d;
 }
 
 export function setModel(d, modelId) {

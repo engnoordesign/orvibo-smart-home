@@ -1,5 +1,5 @@
 // Home logic: scenes, automations, security, climate, presence, energy and time.
-import { bus, home, set, dev, ofType, notify, log, INDOOR, ROOMS, clamp, changed, roomAt } from './state.js';
+import { bus, home, set, dev, ofType, has, notify, log, INDOOR, ROOMS, clamp, changed, roomAt } from './state.js';
 import { audio } from './audio.js';
 
 const lights = (room) => ofType('light').filter(l => !room || l.room === room);
@@ -72,10 +72,10 @@ export const AUTOS = [
   { id: 'window', name: 'Open-window energy saving', when: 'A window sensor reports “open”', then: 'Pause that room’s air-conditioning until it closes', on: true },
   { id: 'humidity', name: 'Bathroom ventilation', when: 'Bathroom humidity rises above 70 %', then: 'Run the exhaust fan until it falls below 55 %', on: true },
   { id: 'sunset', name: 'Sunset / sunrise', when: 'Sunset (18:15) or sunrise (06:30)', then: 'Close curtains at dusk, open them in the morning', on: true },
-  { id: 'doorbell', name: 'Doorbell', when: 'A visitor rings the smart lock', then: 'Lower the music and show the door camera on the MixPad and phone', on: true },
+  { id: 'doorbell', name: 'Doorbell', when: 'A visitor rings the smart lock', then: 'Lower the music and show the door camera on the MixPad, the phone and the TV (if it is on)', on: true },
   { id: 'dooropen', name: 'Door left open', when: 'Entry door stays open for 20 s', then: 'Push a reminder to the phone', on: true },
   { id: 'nightarm', name: 'Night auto-arm', when: 'Clock reaches 23:30', then: 'Lock the door and arm the perimeter (Home mode)', on: false },
-  { id: 'intrusion', name: 'Intrusion response', when: 'Armed and a door / window / presence sensor trips', then: 'Siren, all lights on, strips flash red, cameras record, phone alert', on: true, locked: true },
+  { id: 'intrusion', name: 'Intrusion response', when: 'Armed and a door / window / presence sensor trips', then: 'Siren, all lights on, strips flash red, cameras record and appear on the TV, phone alert', on: true, locked: true },
   { id: 'safety', name: 'Fire, gas and leak protection', when: 'Smoke, gas or water-leak sensor trips', then: 'Shut the valve, ventilate, light the escape route, unlock the door, alert', on: true, locked: true },
   { id: 'sos', name: 'Emergency button', when: 'SOS button is pressed', then: 'Alert the family, lights on, unlock for responders, cameras record', on: true, locked: true },
 ];
@@ -109,11 +109,12 @@ export function arm(mode, src = 'app') {
 export function raiseAlarm(type, where, cam) {
   const s = home.security; if (s.alarm && s.alarm.type === type) return;
   const T = { intrusion: 'INTRUSION DETECTED', tamper: 'LOCK TAMPER ALARM', sos: 'SOS — EMERGENCY BUTTON', smoke: 'SMOKE DETECTED', gas: 'GAS LEAK DETECTED', leak: 'WATER LEAK DETECTED' }[type];
+  cam = cam && has(cam) ? cam : (cam ? ofType('camera')[0]?.id || null : null);
   s.alarm = { type, where, title: T, siren: type !== 'leak', cam, t: performance.now() };
   audio.siren(s.alarm.siren); notify(T, where, 'alarm');
   ofType('camera').forEach(c => set(c.id, { rec: true, on: true }, 'auto'));
   if (type === 'intrusion' || type === 'tamper') {
-    tvs(false); music(false); home.fx.party = false; set('lock', { locked: true }, 'auto');
+    tvs(false); tvCameras(true); music(false); home.fx.party = false; set('lock', { locked: true }, 'auto');
     audio.say('Warning. Intrusion detected. The owner and security have been notified.');
   }
   if (type === 'smoke' || type === 'gas') {
@@ -121,21 +122,22 @@ export function raiseAlarm(type, where, cam) {
     set('lock', { locked: false }, 'auto'); curtains(0);
     audio.say(type === 'gas' ? 'Danger. Gas leak in the kitchen. The gas valve has been closed.' : 'Fire alarm. Smoke detected in the kitchen. Please leave the apartment.');
   }
-  if (type === 'leak') { set('valve_water', { on: false }, 'auto'); audio.say('Water leak detected in the bathroom. The water valve has been closed.'); }
+  if (type === 'leak') { set('valve_water', { on: false }, 'auto'); audio.say('Water leak detected. The water valve has been closed.'); }
   if (type === 'sos') { set('lock', { locked: false }, 'auto'); audio.say('Emergency button pressed. Calling your emergency contacts.'); }
   bus.emit('alarm', s.alarm); changed();
 }
 export function clearAlarm() {
   const s = home.security; if (!s.alarm) return;
-  s.alarm = null; audio.siren(false);
+  s.alarm = null; audio.siren(false); tvCameras(false);
   ofType('camera').forEach(c => set(c.id, { rec: false }, 'auto'));
   ofType('hazard').forEach(h => set(h.id, { alarm: false }, 'auto'));
   bus.emit('alarmclear'); changed();
 }
 export function triggerHazard(kind) {
-  const id = { smoke: 'hz_smoke', gas: 'hz_gas', leak: 'hz_leak' }[kind];
-  set(id, { alarm: true }, 'sim');
-  raiseAlarm(kind, kind === 'leak' ? 'Master Bathroom floor sensor' : 'Kitchen sensor', kind === 'leak' ? null : 'cam_kit');
+  const all = ofType('hazard').filter(h => h.kind === kind), sensor = all.find(h => h.id === { smoke: 'hz_smoke', gas: 'hz_gas', leak: 'hz_leak' }[kind]) || all[0];
+  if (!sensor) return notify('Nothing detected', `No ${kind === 'leak' ? 'water-leak' : kind} sensor is installed in this project, so the home cannot react. Add one in the Control Centre.`, 'warn');
+  set(sensor.id, { alarm: true }, 'sim');
+  raiseAlarm(kind, `${ROOMS[sensor.room].name} — ${sensor.name}`, kind === 'leak' ? null : 'cam_kit');
 }
 export function pressSOS(id) { const d = dev(id); audio.sfx('beep'); raiseAlarm('sos', `${d.name} — ${ROOMS[d.room].name}`, 'cam_liv'); }
 
@@ -171,7 +173,7 @@ bus.on('device', ({ id, d, patch, prev, src }) => {
       log(`${d.name} opened`);
       fireCustom(id === 'ds_entry' ? 'door_open' : 'win_open');
       if (s.mode !== 'disarmed' && s.exitDelay <= 0 && !s.alarm) raiseAlarm('intrusion', `${d.name} opened while armed`, d.cam);
-      if (auto('window') && d.ac) { const a = dev(d.ac); if (a.state.on) { a.paused = true; notify('Air-conditioning paused', `${d.name} is open`, 'info'); } }
+      if (auto('window') && d.ac && has(d.ac)) { const a = dev(d.ac); if (a.state.on) { a.paused = true; notify('Air-conditioning paused', `${d.name} is open`, 'info'); } }
     } else {
       log(`${d.name} closed`);
       if (d.ac && dev(d.ac).paused) { dev(d.ac).paused = false; notify('Air-conditioning resumed', `${d.name} closed`, 'info'); }
@@ -182,6 +184,7 @@ bus.on('device', ({ id, d, patch, prev, src }) => {
 });
 
 // ---------- per-frame simulation ----------
+const SENSED = [...INDOOR, 'balcony'];
 const lastSeen = {}; let acc1 = 0, doorOpenT = 0, lastHour = home.time;
 export function tickSim(dt, actors = []) {
   const s = home.security, prevT = home.time;
@@ -202,11 +205,18 @@ export function tickSim(dt, actors = []) {
   // presence
   const now = performance.now() / 1000, here = {};
   here[home.player.room] = true; actors.forEach(a => { if (a.active) here[roomAt(a.x, a.z)] = true; });
-  for (const r of INDOOR) {
-    if (here[r]) lastSeen[r] = now;
-    const present = here[r] || (lastSeen[r] != null && now - lastSeen[r] < 5);
-    if (present !== home.occupancy[r]) {
-      home.occupancy[r] = present; set('pr_' + r, { present }, 'sensor'); bus.emit('presence', { room: r, present });
+  for (const r of SENSED) {
+    // a room is only "seen" if a presence / motion sensor is actually installed there
+    const sensors = ofType('presence').filter(p => p.room === r), seen = !!here[r] && sensors.length > 0;
+    if (seen) lastSeen[r] = now;
+    const present = seen || (sensors.length > 0 && lastSeen[r] != null && now - lastSeen[r] < 5);
+    for (const p of sensors) if (p.state.present !== present) set(p.id, { present }, 'sensor');
+    if (present !== !!home.occupancy[r]) {
+      home.occupancy[r] = present; bus.emit('presence', { room: r, present });
+      if (r === 'balcony') {
+        if (present && s.mode !== 'disarmed' && s.exitDelay <= 0 && !s.alarm) { notify('Perimeter warning', 'Outdoor motion sensor: movement on the balcony', 'warn'); audio.say('Attention. Movement detected on the balcony.'); bus.emit('prealarm', 'cam_bal'); }
+        continue;
+      }
       if (present) {
         fireCustom('pres:' + r);
         if (s.mode === 'away' && s.exitDelay <= 0 && !s.alarm) raiseAlarm('intrusion', `Presence detected in ${ROOMS[r].name}`, 'cam_liv');
@@ -224,14 +234,15 @@ export function tickSim(dt, actors = []) {
 
 function presenceLighting(r, present) {
   if (!auto('presence') || home.security.alarm) return;
-  const ls = lights(r), main = dev({ living: 'l_liv_down', kitchen: 'l_kit_down', bedroom: 'l_bed_down', master: 'l_mas_down', bath: 'l_bath_down' }[r]);
+  const ls = lights(r), main = ls.find(l => l.kind === 'down' && l.id !== 'l_entry') || ls[0];
+  if (!main) return;
   if (present) {
     const cur = ofType('curtain').find(c => c.room === r);
     const dark = isNight() || r === 'bath' || (cur && cur.state.pos > 70);
     if (dark && !ls.some(l => l.state.on)) {
       const late = home.time >= 23 || home.time < 6;
       set(main.id, { on: true, bri: late ? 15 : 80, cct: late ? 2700 : 3500, rgb: null, fade: 1.2 }, 'auto'); main.auto = true;
-      if (r === 'living') { set('l_entry', { on: true, bri: late ? 15 : 80, fade: 1.2 }, 'auto'); dev('l_entry').auto = true; }
+      if (r === 'living' && has('l_entry')) { set('l_entry', { on: true, bri: late ? 15 : 80, fade: 1.2 }, 'auto'); dev('l_entry').auto = true; }
     }
   } else ls.forEach(l => { if (l.auto && l.state.on) { set(l.id, { on: false, fade: 3 }, 'auto'); l.auto = false; } });
 }
@@ -244,7 +255,7 @@ function slowTick(dt) {
   let watts = 14; // hubs, panels, sensors on standby
   for (const r of INDOOR) {
     const c = home.climate[r], a = ofType('ac').find(x => x.room === r);
-    const win = ofType('contact').some(w => w.room === r && w.state.open && w.id !== 'ds_entry');
+    const win = ofType('contact', true).some(w => w.room === r && w.state.open && w.id !== 'ds_entry'), sensed = ofType('climate').some(t => t.room === r);
     c.temp += (home.outdoor.temp - c.temp) * (0.004 + (win ? 0.035 : 0)) * dt;
     if (adj[r]) c.temp += (home.climate[adj[r]].temp - c.temp) * 0.03 * dt;
     let humT = 47 + (win ? (home.outdoor.hum - 47) * 0.6 : 0), humR = 0.03;
@@ -257,7 +268,7 @@ function slowTick(dt) {
         if (a.state.mode === 'cool' || a.state.mode === 'dry') humT -= 6;
         watts += (a.state.mode === 'fan' ? 60 : 350 + 900 * load * (0.5 + a.state.fan / 4));
       }
-      if (auto('comfort') && home.occupancy[r] && !a.state.on && !win) {
+      if (auto('comfort') && sensed && home.occupancy[r] && !a.state.on && !win) {
         if (home.season === 'summer' && c.temp > 27) { set(a.id, comfort(), 'auto'); notify('Comfort climate', `${ROOMS[r].name} is ${c.temp.toFixed(1)} °C — cooling to 24 °C`, 'info'); }
         if (home.season === 'winter' && c.temp < 19) { set(a.id, comfort(), 'auto'); notify('Comfort climate', `${ROOMS[r].name} is ${c.temp.toFixed(1)} °C — heating to 23 °C`, 'info'); }
       }
@@ -266,13 +277,13 @@ function slowTick(dt) {
       const sh = dev('shower'), fan = dev('fan_bath');
       if (sh.state.on) { humT = 96; humR = 0.09; c.temp += (30 - c.temp) * 0.01 * dt; }
       if (fan.state.on) { humT = Math.min(humT, sh.state.on ? 80 : 44); humR = sh.state.on ? 0.09 : 0.12; watts += 25; }
-      if (auto('humidity')) {
+      if (auto('humidity') && sensed && has('fan_bath')) {
         if (c.hum > 70 && !fan.state.on) { set('fan_bath', { on: true }, 'auto'); fan.auto = true; notify('Bathroom ventilation', `Humidity ${c.hum.toFixed(0)} % — exhaust fan on`, 'info'); }
         if (c.hum < 55 && fan.state.on && fan.auto && !home.security.alarm) { set('fan_bath', { on: false }, 'auto'); fan.auto = false; }
       }
     }
     c.hum += (humT - c.hum) * humR * dt; c.hum = clamp(c.hum, 20, 99);
-    const th = dev('th_' + r); if (th) { th.state.temp = c.temp; th.state.hum = c.hum; }
+    for (const th of ofType('climate', true)) if (th.room === r) { th.state.temp = c.temp; th.state.hum = c.hum; }
   }
   lights().forEach(l => watts += l.power || 0);
   ofType('tv').forEach(t => { if (t.state.on) watts += 110; });
@@ -281,4 +292,17 @@ function slowTick(dt) {
   changed();
 }
 
+// Show the camera wall (or one camera) on the living-room TV.
+let tvPrev = null;
+export function tvCameras(on, cam = null) {
+  const tv = ofType('tv').find(t => t.id === 'tv_liv') || ofType('tv')[0]; if (!tv) return false;
+  if (on && !ofType('camera').length) { notify('No cameras installed', 'Add a camera in the Control Centre.', 'warn'); return false; }
+  if (on) { if (tv.state.ch !== 4 || !tv.state.on) tvPrev = { on: tv.state.on, ch: tv.state.ch === 4 ? 0 : tv.state.ch }; home.tvCam = cam; set(tv.id, { on: true, ch: 4 }, 'auto'); }
+  else if (tv.state.ch === 4) { set(tv.id, tvPrev || { on: tv.state.on, ch: 0 }, 'auto'); tvPrev = null; home.tvCam = null; }
+  return true;
+}
+bus.on('doorbell', () => {
+  const tv = ofType('tv').find(t => t.id === 'tv_liv');
+  if (auto('doorbell') && tv && tv.state.on && has('cam_entry') && !home.security.alarm) { tvCameras(true, 'cam_entry'); setTimeout(() => { if (!home.security.alarm && home.tvCam === 'cam_entry') tvCameras(false); }, 20000); }
+});
 bus.on('doorbell', () => { if (auto('doorbell') && home.music.playing) { home.music.ducked = true; setTimeout(() => { home.music.ducked = false; }, 12000); } });

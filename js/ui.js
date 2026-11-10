@@ -1,12 +1,13 @@
 // HUD, phone app, MixPad UI, lock keypad, device inspector, CCTV overlay and guided tour.
-import { bus, home, set, dev, ofType, notify, ROOMS, INDOOR, fmtTime, changed } from './state.js';
-import { SCENES, runScene, AUTOS, TRIGGERS, addCustomRule, arm, unlockAttempt, triggerHazard, music, ringDoorbell, pressSOS } from './sim.js';
+import { bus, home, set, dev, ofType, has, notify, ROOMS, INDOOR, fmtTime, changed } from './state.js';
+import { renderPlan, initPlan, loadSavedProject } from './plan.js';
+import { SCENES, runScene, AUTOS, TRIGGERS, addCustomRule, arm, unlockAttempt, triggerHazard, music, ringDoorbell, pressSOS, tvCameras } from './sim.js';
 import { CATALOG, modelOf } from './catalog.js';
 import { audio, TRACKS } from './audio.js';
 import { setModel } from './devices.js';
 import { breakIn, lockTamper, visitorRings, forcedDoor } from './actors.js';
 
-export const ui = { open: null, tab: 'home', room: 'all', page: null, cctv: { single: null }, pip: null, tour: true, quality: 'high', relock: null, onQuality: null };
+export const ui = { open: null, tab: 'home', room: 'all', page: null, cctv: { single: null }, pip: null, tour: true, quality: 'balanced', fps: 0, scale: 1, yaw: 0, relock: null, onQuality: null };
 const $ = s => document.querySelector(s);
 const app = $('#app'), tabsEl = $('#tabs'), deviceEl = $('#device');
 let hold = false, pin = '', inspected = null, rule = { trig: 'unlock', scene: 'welcome' };
@@ -16,26 +17,36 @@ function show(kind) {
   ui.open = kind; document.exitPointerLock?.();
   deviceEl.classList.toggle('hidden', !(kind === 'phone' || kind === 'mixpad')); deviceEl.className = (kind === 'phone' || kind === 'mixpad') ? kind : 'hidden';
   $('#lockui').classList.toggle('hidden', kind !== 'lock'); $('#inspect').classList.toggle('hidden', kind !== 'inspect');
-  $('#cctv').classList.toggle('hidden', kind !== 'cctv'); $('#help').classList.toggle('hidden', kind !== 'help');
+  $('#cctv').classList.toggle('hidden', kind !== 'cctv'); $('#help').classList.toggle('hidden', kind !== 'help'); $('#plan').classList.toggle('hidden', kind !== 'plan');
+  document.body.classList.toggle('phone-open', kind === 'phone');
   $('#device-close').textContent = kind === 'mixpad' ? 'Leave MixPad (Esc)' : 'Close (Tab)';
 }
 export function closeOverlay(relock = true) { if (!ui.open) return; show(null); ui.cctv.single = null; if (relock) ui.relock?.(); }
 export function openPhone(tab) { if (tab) { ui.tab = tab; ui.page = null; } show('phone'); render(); bus.emit('ui', 'phone'); }
-export function openCCTV() { show('cctv'); $('#cctv').classList.remove('single'); bus.emit('ui', 'cctv'); }
-export function toggle(kind) { if (ui.open === kind) closeOverlay(); else if (kind === 'phone') openPhone(); else if (kind === 'cctv') openCCTV(); else if (kind === 'help') openHelp(); }
+export const cctvGrid = n => { const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3; return { cols, rows: Math.max(1, Math.ceil(n / cols)) }; };
+export const cctvCams = () => ofType('camera').slice(0, 9);
+export function openCCTV() {
+  const cams = cctvCams(), g = cctvGrid(cams.length), el = $('#cctv');
+  if (!cams.length) return notify('No cameras installed', 'Add a camera in the Control Centre.', 'warn');
+  el.querySelectorAll('.cam').forEach(c => c.remove()); el.style.gridTemplateColumns = `repeat(${g.cols}, 1fr)`; el.style.gridTemplateRows = `repeat(${g.rows}, 1fr)`;
+  cams.forEach((c, i) => { const t = document.createElement('div'); t.className = 'cam'; t.dataset.i = i; el.insertBefore(t, $('#cctv-bar')); });
+  ui.cctv.single = null; show('cctv'); el.classList.remove('single'); bus.emit('ui', 'cctv');
+}
+ui.openPlan = () => { show('plan'); render(); bus.emit('ui', 'plan'); };
+export function toggle(kind) { if (ui.open === kind) closeOverlay(); else if (kind === 'phone') openPhone(); else if (kind === 'cctv') openCCTV(); else if (kind === 'help') openHelp(); else if (kind === 'plan') ui.openPlan(); }
 bus.on('openMixPad', d => { ui.room = d.room; ui.page = null; ui.tab = home.security.alarm ? 'security' : 'home'; show('mixpad'); render(); bus.emit('ui', 'mixpad'); });
 bus.on('openLockUI', () => { pin = ''; renderLock(); show('lock'); });
 bus.on('inspect', d => openInspect(d));
 bus.on('openCCTV', openCCTV);
 
 // ---------- small html helpers ----------
-const sw = (on, a, extra = '') => `<button class="sw ${on ? 'on' : ''}" data-a="${a}" ${extra}></button>`;
-const chips = (items, cur, a, extra = '') => `<div class="chips">${items.map(([v, l]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" data-a="${a}" data-v="${v}" ${extra}>${l}</button>`).join('')}</div>`;
+export const sw = (on, a, extra = '') => `<button class="sw ${on ? 'on' : ''}" data-a="${a}" ${extra}></button>`;
+export const chips = (items, cur, a, extra = '') => `<div class="chips">${items.map(([v, l]) => `<button class="${String(v) === String(cur) ? 'on' : ''}" data-a="${a}" data-v="${v}" ${extra}>${l}</button>`).join('')}</div>`;
 const range = (i, id, v, min, max, step = 1) => `<input type="range" min="${min}" max="${max}" step="${step}" value="${v}" data-i="${i}" data-id="${id}">`;
 const COLORS = ['#ff3b3b', '#ff9a3a', '#ffe14a', '#3ddc6a', '#33d6ff', '#3a5cff', '#a04aff', '#ff3bb0'];
 const head = (d, right = '') => `<div class="row"><div class="g"><b>${d.name}</b><small>${modelOf(d)?.name || ''}</small></div>${right}</div>`;
 
-function devCard(d) {
+export function devCard(d) {
   const s = d.state, id = `data-id="${d.id}"`;
   switch (d.type) {
     case 'light': return `<div class="card">${head(d, sw(s.on, 'tog', id))}
@@ -61,10 +72,21 @@ function devCard(d) {
     case 'hazard': return line(d, s.alarm ? '<span class="chip bad">ALARM</span>' : '<span class="chip ok">Normal</span>');
     case 'sos': return line(d, `<button class="btn bad" data-a="sos" ${id}>Test SOS</button>`);
     case 'relay': return line(d, sw(s.on, 'tog', id));
-    case 'camera': return line(d, `<span class="mut">${s.rec ? '● REC' : s.on ? 'live' : 'privacy'}</span> ${sw(s.on, 'tog', id)}`);
+    case 'camera': return `<div class="card">${head(d, `<span class="mut">${s.rec ? '● REC' : s.on ? 'live' : 'privacy'}</span> ${sw(s.on, 'tog', id)}`)}${feed(d)}<div class="row"><button class="btn pri" data-a="tvcam" data-v="${d.id}">Show on TV</button><button class="btn" data-a="cctv">Full screen</button></div></div>`;
     case 'lock': return lockCard();
     case 'mixpad': case 'switch': return line(d, '<span class="chip ok">Online</span>');
     default: return '';
+  }
+}
+// Live camera picture inside the app: the render loop paints into every canvas.feed it finds.
+const feedCache = {};
+export const feed = d => `<div class="feedbox" data-a="page" data-v="${d.id}"><canvas class="feed" data-cam="${d.id}" width="320" height="180"></canvas><span>${d.name.toUpperCase()}${d.state.rec ? ' <i>● REC</i>' : ''}</span></div>`;
+export function paintFeeds(id, source, sx, sy, sw, sh) {
+  if (source) { const c = feedCache[id] ??= Object.assign(document.createElement('canvas'), { width: 320, height: 180 }); c.getContext('2d').drawImage(source, sx, sy, sw, sh, 0, 0, 320, 180); }
+  for (const el of document.querySelectorAll('canvas.feed')) {
+    const cid = el.dataset.cam; if (id && cid !== id) continue; const g = el.getContext('2d'), d = dev(cid);
+    if (!d || d.installed === false || !d.state.on) { g.fillStyle = '#0c0f14'; g.fillRect(0, 0, 320, 180); g.fillStyle = '#7d8796'; g.font = '14px system-ui'; g.textAlign = 'center'; g.fillText('Privacy mode — camera off', 160, 94); }
+    else if (feedCache[cid]) g.drawImage(feedCache[cid], 0, 0);
   }
 }
 const line = (d, right) => `<div class="card"><div class="row"><div class="g"><b>${d.name}</b><small>${modelOf(d)?.name || ''}</small></div>${right}</div></div>`;
@@ -75,10 +97,10 @@ function lockCard() {
     ${home.tempPin ? `<div class="mut">One-time visitor PIN: <b style="color:var(--gold);font-size:16px">${home.tempPin}</b> (valid for a single entry)</div>` : ''}
     <div class="mut">Users: ${home.users.map(u => u.name).join(', ')} · Owner PIN ${home.users[0].pin}</div></div>`;
 }
-const secChip = () => { const s = home.security; return s.alarm ? `<span class="chip bad">ALARM</span>` : s.mode === 'disarmed' ? `<span class="chip ok">Disarmed</span>` : `<span class="chip warn">${s.exitDelay > 0 ? `Arming ${Math.ceil(s.exitDelay)}s` : s.mode === 'home' ? 'Armed Home' : 'Armed Away'}</span>`; };
-const alarmCard = () => { const a = home.security.alarm; return a ? `<div class="card alarm"><b>⚠ ${a.title}</b><div>${a.where}</div><button class="btn wide" style="background:#fff;color:#a01010;font-weight:700" data-a="arm" data-v="disarmed">Disarm &amp; silence</button></div>` : ''; };
+export const secChip = () => { const s = home.security; return s.alarm ? `<span class="chip bad">ALARM</span>` : s.mode === 'disarmed' ? `<span class="chip ok">Disarmed</span>` : `<span class="chip warn">${s.exitDelay > 0 ? `Arming ${Math.ceil(s.exitDelay)}s` : s.mode === 'home' ? 'Armed Home' : 'Armed Away'}</span>`; };
+export const alarmCard = () => { const a = home.security.alarm; return a ? `<div class="card alarm"><b>⚠ ${a.title}</b><div>${a.where}</div><button class="btn wide" style="background:#fff;color:#a01010;font-weight:700" data-a="arm" data-v="disarmed">Disarm &amp; silence</button></div>` : ''; };
 
-const ICON = { light: '💡', curtain: '🪟', ac: '❄️', tv: '📺', speaker: '🔊', lock: '🔐', camera: '📷', relay: '🔌', contact: '🚪', presence: '🧍', climate: '🌡️', hazard: '🛟', sos: '🆘', mixpad: '📱', switch: '🔘' };
+export const ICON = { light: '💡', curtain: '🪟', ac: '❄️', tv: '📺', speaker: '🔊', lock: '🔐', camera: '📷', relay: '🔌', contact: '🚪', presence: '🧍', climate: '🌡️', hazard: '🛟', sos: '🆘', mixpad: '📱', switch: '🔘' };
 function tile(d) {
   const s = d.state, tog = ['light', 'ac', 'tv', 'speaker', 'relay'].includes(d.type);
   const on = tog ? s.on : d.type === 'curtain' ? s.pos < 50 : d.type === 'lock' ? !s.locked : d.type === 'contact' ? s.open : d.type === 'presence' ? s.present : d.type === 'hazard' ? s.alarm : false;
@@ -90,7 +112,7 @@ function page() {
   const d = dev(ui.page), c = CATALOG[d.cat];
   return `<div class="hdr"><button class="back" data-a="back">‹</button><b>${d.name}</b><span class="mut">${ROOMS[d.room].name}</span></div>
     <div class="hero"><div>${ICON[d.type] || '⚙️'}</div><small>${modelOf(d)?.name || ''}</small></div>${devCard(d)}
-    ${d.type === 'camera' ? '<button class="btn pri wide" data-a="cctv">Open live view</button>' : ''}${d.type === 'speaker' ? '<button class="btn pri wide" data-a="page" data-v="music">Open music player</button>' : ''}
+    ${d.type === 'speaker' ? '<button class="btn pri wide" data-a="page" data-v="music">Open music player</button>' : ''}
     ${c ? `<div class="card"><b>${c.title}</b><div class="mut">${c.blurb}</div>${c.models.length > 1 ? `<div class="row"><label>Installed model</label><select data-c="model1" data-id="${d.id}">${c.models.map(m => `<option value="${m.id}" ${d.model === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}</select></div>` : ''}</div>` : ''}`;
 }
 
@@ -99,8 +121,8 @@ const TABS = {
   home() {
     const c = home.climate[INDOOR.includes(home.player.room) ? home.player.room : 'living'], all = ui.room === 'all';
     const order = ['light', 'curtain', 'ac', 'tv', 'speaker', 'lock', 'camera', 'relay', 'contact', 'presence', 'climate', 'hazard', 'sos', 'mixpad', 'switch'];
-    const ds = Object.values(home.devices).filter(d => order.includes(d.type) && (all ? !['presence', 'climate', 'contact', 'hazard', 'sos', 'switch'].includes(d.type) : d.room === ui.room)).sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
-    return `<div class="hdr"><b>My Home ▾</b><span class="mut">Apartment A·1204</span><button class="plus" data-a="tab" data-v="more">＋</button></div>
+    const ds = Object.values(home.devices).filter(d => d.installed !== false && order.includes(d.type) && (all ? !['presence', 'climate', 'contact', 'hazard', 'sos', 'switch'].includes(d.type) : d.room === ui.room)).sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
+    return `<div class="hdr"><b>My Home ▾</b><span class="mut">Apartment A·1204</span><button class="plus" data-a="plan" data-v="custom" title="Add or remove devices">＋</button></div>
     <div class="env"><div><b>${home.outdoor.temp.toFixed(0)}°C</b><span>Outdoor</span></div><div><b>${c.temp.toFixed(1)}°C</b><span>Indoor</span></div><div><b>${c.hum.toFixed(0)}%</b><span>Humidity</span></div><div><b>${Math.round(home.energy)} W</b><span>Power</span></div></div>
     ${alarmCard()}
     <div class="secrow"><div class="g"><b>Security</b> ${secChip()}</div>${[['home', 'At home'], ['away', 'Away'], ['disarmed', 'Disarm']].map(([v, l]) => `<button class="${home.security.mode === v ? 'on' : ''}" data-a="arm" data-v="${v}">${l}</button>`).join('')}</div>
@@ -123,7 +145,8 @@ const TABS = {
     const s = home.security;
     return `<h2>Security ${secChip()}</h2>${alarmCard()}<div class="seg">${[['disarmed', 'Disarm'], ['home', 'Arm Home'], ['away', 'Arm Away']].map(([v, l]) => `<button class="${s.mode === v ? 'on' : ''}" data-a="arm" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="mut" style="margin-top:6px"><b>Home</b>: door and window sensors. <b>Away</b>: plus presence sensors, 10 s exit delay — leave the apartment before it ends.</div>
-    <h3>Cameras</h3><button class="btn pri wide" data-a="cctv">Open live view — 4 cameras</button>
+    <h3>Cameras — live</h3><div class="feeds">${ofType('camera').map(feed).join('') || '<div class="mut">No cameras installed.</div>'}</div>
+    <div class="row"><button class="btn pri" data-a="cctv">Full-screen camera wall</button><button class="btn" data-a="tvcam" data-v="">${dev('tv_liv')?.state.on && dev('tv_liv').state.ch === 4 ? 'Stop cameras on TV' : 'Show cameras on TV'}</button></div>
     <h3>Smart lock</h3>${lockCard()}
     <h3>Sensors</h3><div class="cols">${[...ofType('contact'), ...ofType('presence'), ...ofType('hazard')].map(d => `<div class="kv"><span>${ROOMS[d.room].name} · ${d.name}</span>${d.type === 'contact' ? (d.state.open ? '<b style="color:var(--bad)">OPEN</b>' : 'closed') : d.type === 'presence' ? (d.state.present ? '<b style="color:var(--ok)">occupied</b>' : 'vacant') : (d.state.alarm ? '<b style="color:var(--bad)">ALARM</b>' : 'normal')}</div>`).join('')}</div>
     <h3>Test the protection — simulations</h3><div class="card"><div class="mut">Watch how ORVIBO reacts. Arm the system first to see the full response.</div>
@@ -140,16 +163,16 @@ const TABS = {
     <h3>Playlist</h3>${TRACKS.map((x, i) => `<div class="kv" data-a="settrk" data-v="${i}" style="cursor:pointer"><span style="color:${i === m.track ? 'var(--gold)' : ''}">${i === m.track && m.playing ? '♪ ' : ''}${x.name}</span>${x.artist}</div>`).join('')}`;
   },
   more() {
-    return `<div class="me"><div class="av">DH</div><div><b>Digital Home</b><small>Owner · My Home · ${Object.keys(home.devices).length} devices</small></div></div>
-    <h3>Message centre</h3><div class="card">${home.log.slice(0, 6).map(l => `<div class="log ${l.level}"><i>${l.t}</i>${l.text}</div>`).join('') || '<div class="mut">No messages.</div>'}</div><h3>Time of day — ${fmtTime()}</h3><div class="card"><div class="row">${range('time', '', home.time.toFixed(2), 0, 23.99, 0.05)}</div>
+    return `<div class="me"><div class="av">DH</div><div><b>Digital Home</b><small>Owner · My Home · ${Object.values(home.devices).filter(d => d.installed !== false).length} devices</small></div></div>
+    <button class="btn pri wide" data-a="plan" data-v="control">Open Control Centre — 2D plan (F)</button><button class="btn wide" data-a="plan" data-v="custom">Customise the project — add / remove items</button><h3>Message centre</h3><div class="card">${home.log.slice(0, 6).map(l => `<div class="log ${l.level}"><i>${l.t}</i>${l.text}</div>`).join('') || '<div class="mut">No messages.</div>'}</div><h3>Time of day — ${fmtTime()}</h3><div class="card"><div class="row">${range('time', '', home.time.toFixed(2), 0, 23.99, 0.05)}</div>
     <div class="row"><label>Clock speed</label>${chips([[0, 'Paused'], [1, '1 min/s'], [10, '10 min/s'], [60, '1 h/s']], home.timeSpeed, 'speed')}</div>
     <div class="row"><label>Season</label>${chips([['summer', '☀ Summer'], ['winter', '❄ Winter']], home.season, 'season')}</div></div>
     <h3>Product configurator</h3><div class="card"><div class="mut">Choose which ORVIBO model is installed. Press <b>Q</b> on any device in the apartment to change just that one.</div>
     ${Object.entries(CATALOG).filter(([, c]) => c.models.length > 1).map(([k, c]) => { const cur = Object.values(home.devices).find(d => d.cat === k); return cur ? `<div class="row"><label>${c.title.replace('Smart ', '').replace('SOPRO ', '').slice(0, 22)}</label><select data-c="model" data-k="${k}">${c.models.map(m => `<option value="${m.id}" ${cur.model === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}</select></div>` : ''; }).join('')}</div>
     <h3>Voice assistant</h3><div class="card"><div class="row"><input type="text" id="cmd" placeholder="e.g. movie night, lights off, set 22 degrees"><button class="btn pri" data-a="cmd">Send</button></div>
-    <div class="chips">${['I am home', 'Movie night', 'Open the curtains', 'Play music', 'Lights off', 'Arm home', 'Good night'].map(c => `<button data-a="say" data-v="${c}">${c}</button>`).join('')}</div></div>
+    <div class="chips">${['I am home', 'Movie night', 'Show cameras on TV', 'Open the curtains', 'Play music', 'Lights off', 'Arm home', 'Good night'].map(c => `<button data-a="say" data-v="${c}">${c}</button>`).join('')}</div></div>
     <h3>Energy</h3><div class="stat"><div><b>${Math.round(home.energy)} W</b><span>now</span></div><div><b>${(home.kwh || 0).toFixed(2)}</b><span>kWh today</span></div><div><b>${ofType('ac').filter(a => a.running).length}</b><span>AC running</span></div><div><b>${Object.keys(home.devices).length}</b><span>devices</span></div></div>
-    <h3>Settings</h3><div class="card"><div class="row"><label>Graphics</label>${chips([['low', 'Low'], ['high', 'High'], ['ultra', 'Ultra 4K']], ui.quality, 'quality')}</div>
+    <h3>Settings</h3><div class="card"><div class="row"><label>Graphics</label>${chips([['low', 'Low'], ['balanced', 'Balanced'], ['high', 'High'], ['ultra', 'Ultra 4K']], ui.quality, 'quality')}</div>
     <div class="row"><div class="g"><b>Ray-traced photo mode</b><small>Path-traced still of the current view (key P)</small></div><button class="btn pri" data-a="photo">Render</button></div>
     <div class="row"><div class="g"><b>Voice announcements</b></div>${sw(audio.voice, 'voice')}</div><div class="row"><div class="g"><b>Guided tour objectives</b></div>${sw(ui.tour, 'tour')}</div></div>
     <div class="mut" style="text-align:center;margin:14px 0">Digital Home — exclusive ORVIBO distributor.<br>Demonstration simulator; product behaviour is illustrative.</div>`;
@@ -158,16 +181,18 @@ const TABS = {
 const TABDEF = [['home', '🏠', 'Home'], ['smart', '✨', 'Smart'], ['security', '🛡️', 'Security'], ['more', '👤', 'Me']];
 
 function render() {
+  const ae = document.activeElement; if (hold || (ae && (app.contains(ae) || $('#plan').contains(ae)) && (ae.tagName === 'SELECT' || ae.type === 'text'))) return;
+  if (ui.open === 'plan') { renderPlan(); paintFeeds(); return; }
   if (ui.open !== 'phone' && ui.open !== 'mixpad') return;
-  const ae = document.activeElement; if (hold || (ae && app.contains(ae) && (ae.tagName === 'SELECT' || ae.type === 'text'))) return;
   if (!TABDEF.some(t => t[0] === ui.tab)) ui.tab = 'home';
   app.innerHTML = ui.page ? page() : TABS[ui.tab]();
+  paintFeeds();
   tabsEl.innerHTML = TABDEF.map(([k, i, l]) => `<button class="${ui.tab === k ? 'on' : ''}" data-a="tab" data-v="${k}"><span>${i}</span>${l}</button>`).join('');
 }
 bus.on('change', render);
 
 // ---------- actions ----------
-const A = {
+export const A = {
   tab: v => { ui.tab = v; ui.page = null; app.scrollTop = 0; }, room: v => ui.room = v, page: v => { ui.page = v; app.scrollTop = 0; }, back: () => { ui.page = null; },
   scene: v => runScene(v, ui.open === 'mixpad' ? 'MixPad' : 'app'),
   tog: (v, id) => { const d = dev(id); set(id, { on: !d.state.on }, 'app'); if (d.type === 'speaker' && d.state.on && !home.music.playing) music(true); if (d.type === 'relay') d.auto = false; },
@@ -178,7 +203,8 @@ const A = {
   lock: v => { const l = dev('lock'); if (v === 'unlock') { if (l.state.locked) unlockAttempt('app', true, 'Owner, remote'); } else set('lock', { open: false, locked: true }, 'app'); },
   temppin: () => { home.tempPin = String(100000 + Math.floor(Math.random() * 899999)); notify('One-time PIN created', home.tempPin, 'ok'); },
   cctv: () => openCCTV(),
-  sim: v => { closeOverlay(); ({ breakin: breakIn, armbreak: () => { if (home.security.mode === 'disarmed') arm('home', 'app'); breakIn(); }, forced: forcedDoor, tamper: lockTamper, visitor: visitorRings, smoke: () => triggerHazard('smoke'), gas: () => triggerHazard('gas'), leak: () => triggerHazard('leak'), sos: () => pressSOS('sos_bath') })[v](); },
+  tvcam: v => { const tv = dev('tv_liv'), showing = tv && tv.state.on && tv.state.ch === 4 && (home.tvCam || '') === (v || ''); if (tvCameras(!showing, v || null)) notify(showing ? 'TV back to normal' : 'Cameras on the living-room TV', showing ? '' : v ? dev(v).name : 'Camera wall', 'ok'); },
+  sim: v => { closeOverlay(); ({ breakin: breakIn, armbreak: () => { if (home.security.mode === 'disarmed') arm('home', 'app'); breakIn(); }, forced: forcedDoor, tamper: lockTamper, visitor: visitorRings, smoke: () => triggerHazard('smoke'), gas: () => triggerHazard('gas'), leak: () => triggerHazard('leak'), sos: () => { const b = ofType('sos')[0]; b ? pressSOS(b.id) : notify('No emergency button installed', 'Add one in the Control Centre.', 'warn'); } })[v](); },
   auto: v => { AUTOS[v].on = !AUTOS[v].on; }, addrule: () => addCustomRule(rule.trig, rule.scene),
   play: () => { const p = !home.music.playing; music(p, p && !ofType('speaker').some(s => s.state.on) ? { zones: ['spk_liv'] } : {}); },
   trk: v => music(true, { track: (home.music.track + +v + TRACKS.length) % TRACKS.length }), settrk: v => music(true, { track: +v }),
@@ -191,29 +217,32 @@ const A = {
 };
 function onClick(e) {
   const el = e.target.closest('[data-a]'); if (!el || el.disabled) return;
-  A[el.dataset.a]?.(el.dataset.v, el.dataset.id); audio.sfx('tap'); changed(); setTimeout(render, 0);
+  A[el.dataset.a]?.(el.dataset.v, el.dataset.id, e); audio.sfx('tap'); changed(); setTimeout(render, 0);
 }
 const I = {
   bri: (v, id) => { dev(id).quick = performance.now() + 400; set(id, { bri: +v, on: true }, 'app'); }, cct: (v, id) => { dev(id).quick = performance.now() + 400; set(id, { cct: +v, rgb: null }, 'app'); },
   pos: (v, id) => set(id, { pos: +v }, 'app'), vol: (v, id) => set(id, { vol: +v }, 'app'), mvol: v => { home.music.vol = +v; }, time: v => { home.time = +v; },
 };
-app.addEventListener('input', e => { const d = e.target.dataset; if (d.i) I[d.i](e.target.value, d.id); });
-app.addEventListener('change', e => {
+const onInput = e => { const d = e.target.dataset; if (d.i) I[d.i](e.target.value, d.id); };
+app.addEventListener('input', onInput); $('#plan').addEventListener('input', onInput);
+const onChange = e => {
   const d = e.target.dataset;
   if (d.c === 'trig') rule.trig = e.target.value; if (d.c === 'rscene') rule.scene = e.target.value;
   if (d.c === 'model1') setModel(dev(d.id), e.target.value);
   if (d.c === 'model') { Object.values(home.devices).filter(x => x.cat === d.k).forEach(x => setModel(x, e.target.value)); notify('Model changed', CATALOG[d.k].models.find(m => m.id === e.target.value).name, 'ok'); }
   e.target.blur(); setTimeout(render, 0);
-});
+};
+app.addEventListener('change', onChange); $('#plan').addEventListener('change', onChange);
+$('#plan').addEventListener('keydown', e => { if (e.target.type === 'text') e.stopPropagation(); });
 app.addEventListener('keydown', e => { if (e.target.type === 'text') e.stopPropagation(); if (e.key === 'Enter' && e.target.id === 'cmd') voiceCommand(e.target.value); });
-for (const el of [app, tabsEl, $('#lockui'), $('#inspect'), $('#help'), $('#alarm'), $('#pip')]) el.addEventListener('click', onClick);
-$('#frame').addEventListener('pointerdown', () => hold = true);
+for (const el of [app, tabsEl, $('#lockui'), $('#inspect'), $('#help'), $('#alarm'), $('#pip'), $('#plan')]) el.addEventListener('click', onClick);
+$('#frame').addEventListener('pointerdown', () => hold = true); $('#plan').addEventListener('pointerdown', () => hold = true);
 addEventListener('pointerup', () => { if (hold) { hold = false; setTimeout(render, 30); } });
 $('#device-close').onclick = () => closeOverlay(); $('#cctv-close').onclick = e => { e.stopPropagation(); closeOverlay(); };
 deviceEl.addEventListener('click', e => { if (e.target === deviceEl) closeOverlay(); });
 for (const id of ['#lockui', '#inspect', '#help']) $(id).addEventListener('click', e => { if (e.target === $(id)) closeOverlay(); });
-document.querySelectorAll('#cctv .cam').forEach(c => c.onclick = () => {
-  const el = $('#cctv'), i = +c.dataset.i;
+$('#cctv').addEventListener('click', e => {
+  const c = e.target.closest('.cam'); if (!c) return; const el = $('#cctv'), i = +c.dataset.i;
   if (ui.cctv.single === i) { ui.cctv.single = null; el.classList.remove('single'); c.classList.remove('sel'); }
   else { ui.cctv.single = i; el.classList.add('single'); document.querySelectorAll('#cctv .cam').forEach(x => x.classList.toggle('sel', x === c)); }
 });
@@ -231,6 +260,7 @@ export function voiceCommand(text) {
   else if (has('light')) { const on = !has('off'); ofType('light').filter(l => l.room === room && (on ? l.kind === 'down' : true)).forEach(l => set(l.id, { on, fade: 1 }, 'voice')); reply = `${ROOMS[room].name} lights ${on ? 'on' : 'off'}.`; }
   else if (has('curtain', 'blind')) { const pos = has('close', 'shut') ? 100 : 0; ofType('curtain').forEach(c => set(c.id, { pos }, 'voice')); reply = `Curtains ${pos ? 'closing' : 'opening'}.`; }
   else if (has('music', 'song', 'play')) { const p = !has('stop', 'pause', 'off'); music(p, p ? { zones: [ofType('speaker').find(s => s.room === room)?.id || 'spk_liv'] } : {}); reply = p ? 'Playing music.' : 'Music stopped.'; }
+  else if (has('camera') && has('tv', 'television', 'screen', 'show')) { tvCameras(!has('off', 'stop', 'hide')); reply = has('off', 'stop', 'hide') ? 'Cameras off the TV.' : 'Showing the cameras on the TV.'; }
   else if (has('tv', 'television')) { set('tv_liv', { on: !has('off') }, 'voice'); reply = 'OK.'; }
   else if (num && has('degree', 'temperature', 'set', '°')) { const a = ofType('ac').find(x => x.room === room) || dev('ac_liv'); set(a.id, { on: true, set: Math.max(16, Math.min(30, +num[1])) }, 'voice'); reply = `${a.name} set to ${num[1]} degrees.`; }
   else if (has('cool', 'hot', 'ac ', 'air')) { const a = ofType('ac').find(x => x.room === room) || dev('ac_liv'); set(a.id, { on: !has('off') }, 'voice'); reply = 'Air-conditioning ' + (has('off') ? 'off.' : 'on.'); }
@@ -278,7 +308,7 @@ function renderInspect() {
     <button class="btn pri wide" data-a="close" style="margin-top:14px">Done</button></div>`;
 }
 function openHelp() {
-  $('#help').innerHTML = `<div class="modal"><h2>Controls</h2>${[['W A S D / arrows', 'Walk'], ['Shift', 'Run'], ['Mouse', 'Look around (click the view to capture the mouse)'], ['E or left click', 'Use the device you are looking at'], ['Q or right click', 'Inspect a device and choose its model'], ['Tab', 'Open / close the phone app'], ['C', 'Security cameras (click a tile for full screen)'], ['P', 'Ray-traced photo of the current view'], ['X', 'Disarm / silence the alarm'], ['M', 'Mute sound'], ['Esc', 'Release the mouse / close a panel']].map(([k, v]) => `<div class="kv"><b>${k}</b><span>${v}</span></div>`).join('')}
+  $('#help').innerHTML = `<div class="modal"><h2>Controls</h2>${[['W A S D / arrows', 'Walk'], ['Shift', 'Run'], ['Mouse', 'Look around (click the view to capture the mouse)'], ['E or left click', 'Use the device you are looking at'], ['Q or right click', 'Inspect a device and choose its model'], ['Tab', 'Open / close the phone app'], ['F', 'Control Centre: 2D plan, full control, project customisation'], ['C', 'Security cameras (click a tile for full screen)'], ['P', 'Ray-traced photo of the current view'], ['X', 'Disarm / silence the alarm'], ['M', 'Mute sound'], ['Esc', 'Release the mouse / close a panel']].map(([k, v]) => `<div class="kv"><b>${k}</b><span>${v}</span></div>`).join('')}
     <div class="mut" style="margin-top:10px">Tip: walk up to the MixPad by the entrance or beside the master-bedroom door and press E to use it like the real panel.</div><button class="btn pri wide" data-a="close">Got it</button></div>`;
   show('help');
 }
@@ -289,9 +319,10 @@ bus.on('notify', n => {
   const box = $('#toasts'); box.prepend(t); while (box.children.length > 4) box.lastChild.remove();
   setTimeout(() => t.remove(), n.level === 'alarm' ? 9000 : 5500); if (n.level !== 'alarm') audio.sfx('chime');
 });
-bus.on('alarm', a => { ui.pip = a.cam || null; });
+bus.on('alarm', a => { ui.pip = a.cam || null; ui.pipUntil = 0; });
+bus.on('prealarm', cam => { if (!home.security.alarm && has(cam)) { ui.pip = cam; ui.pipUntil = performance.now() + 14000; } });
 bus.on('alarmclear', () => { ui.pip = null; });
-bus.on('doorbell', () => { if (!home.security.alarm) ui.pip = 'cam_entry'; });
+bus.on('doorbell', () => { if (!home.security.alarm && has('cam_entry')) { ui.pip = 'cam_entry'; ui.pipUntil = 0; } });
 A.pipx = () => { ui.pip = null; home.doorbell = null; };
 A.pipunlock = () => { A.lock('unlock'); ui.pip = null; home.doorbell = null; };
 
@@ -324,23 +355,25 @@ export function updateHUD(dt, target, yaw, actors) {
   const txt = target && !ui.open ? target.label() : '';
   if (txt !== lastPrompt) { lastPrompt = txt; $('#prompt').innerHTML = txt ? `<b>E</b>${txt}${target.dev && CATALOG[target.dev.cat] ? '<i>Q details</i>' : ''}` : ''; $('#prompt').classList.toggle('on', !!txt); $('#crosshair').classList.toggle('hot', !!txt); }
   accS += dt; accM += dt;
-  $('#hud').classList.toggle('clean', ui.open === 'cctv' || !$('#photo').classList.contains('hidden'));
+  $('#hud').classList.toggle('clean', ui.open === 'cctv' || ui.open === 'plan' || !$('#photo').classList.contains('hidden'));
   if (accS > 0.3) {
     accS = 0; const r = p.room, c = home.climate[r];
-    $('#status').innerHTML = `<div class="room">${ROOMS[r]?.name || 'Outside'}</div><div class="row">${fmtTime()} · ${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % RH` : `outdoor ${home.outdoor.temp.toFixed(0)} °C`}</div><div class="row">${secChip()} <span class="chip">${Math.round(home.energy)} W</span>${home.music.playing ? ' <span class="chip">♪</span>' : ''}</div>`;
+    $('#status').innerHTML = `<div class="room">${ROOMS[r]?.name || 'Outside'}</div><div class="row">${fmtTime()} · ${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % RH` : `outdoor ${home.outdoor.temp.toFixed(0)} °C`}</div><div class="row">${secChip()} <span class="chip">${Math.round(home.energy)} W</span> <span class="chip">${ui.fps} fps</span>${home.music.playing ? ' <span class="chip">♪</span>' : ''}</div>`;
     const al = $('#alarm');
     if (s.alarm) { al.classList.remove('hidden'); al.innerHTML = `<b>⚠ ${s.alarm.title}</b><small>${s.alarm.where}</small><button data-a="arm" data-v="disarmed">Disarm (X)</button>`; } else al.classList.add('hidden');
-    if (ui.pip === 'cam_entry' && !s.alarm && !home.doorbell) ui.pip = null;
-    const pip = $('#pip'), showPip = ui.pip && !ui.open; pip.classList.toggle('hidden', !showPip); $('#hud').classList.toggle('haspip', !!showPip);
+    if (ui.pip && !s.alarm && (ui.pipUntil ? performance.now() > ui.pipUntil : !home.doorbell)) ui.pip = null;
+    if (ui.pip && !has(ui.pip)) ui.pip = null;
+    const pip = $('#pip'), showPip = ui.pip && (!ui.open || ui.open === 'phone'); pip.classList.toggle('hidden', !showPip); $('#hud').classList.toggle('haspip', !!showPip);
     if (showPip) {
       $('#pip-label').innerHTML = `${dev(ui.pip).name.toUpperCase()} <span style="color:var(--bad)">● ${s.alarm ? 'REC' : 'LIVE'}</span>`;
-      const b = s.alarm ? '<button class="pri" data-a="arm" data-v="disarmed">Disarm</button><button data-a="cctv">All cameras</button>' : '<button class="pri" data-a="pipunlock">Unlock door</button><button data-a="pipx">Dismiss</button>';
+      const b = s.alarm ? '<button class="pri" data-a="arm" data-v="disarmed">Disarm</button><button data-a="cctv">All cameras</button>' : home.doorbell ? '<button class="pri" data-a="pipunlock">Unlock door</button><button data-a="pipx">Dismiss</button>' : '<button class="pri" data-a="cctv">All cameras</button><button data-a="pipx">Dismiss</button>';
       if ($('#pip-btns').dataset.k !== b) { $('#pip-btns').innerHTML = b; $('#pip-btns').dataset.k = b; }
     }
-    if (ui.open === 'cctv') document.querySelectorAll('#cctv .cam').forEach((el, i) => { const d = ofType('camera')[i]; el.classList.toggle('off', !d.state.on); el.innerHTML = d.state.on ? `CAM ${i + 1} · ${d.name.toUpperCase()}${d.state.rec ? '<span class="rec">● REC</span>' : ''}<span class="ts">${fmtTime()}</span>` : `CAM ${i + 1} · ${d.name} — privacy mode`; });
+    if (ui.open === 'cctv') document.querySelectorAll('#cctv .cam').forEach((el, i) => { const d = cctvCams()[i]; if (!d) return; el.classList.toggle('off', !d.state.on); el.innerHTML = d.state.on ? `CAM ${i + 1} · ${d.name.toUpperCase()}${d.state.rec ? '<span class="rec">● REC</span>' : ''}<span class="ts">${fmtTime()}</span>` : `CAM ${i + 1} · ${d.name} — privacy mode`; });
     if (ui.open === 'lock' && s.lockFreeze > 0) renderLock();
   }
-  if (accM > 0.1) { accM = 0; drawMap(yaw, actors); }
+  ui.yaw = yaw;
+  if (accM > 0.1) { accM = 0; drawMap(yaw, actors); if (ui.open === 'plan' && !hold) renderPlan(true); }
 }
 function drawMap(yaw, actors) {
   const W = mm.width, Hh = mm.height, sc = 15.2, ox = 30, oz = 16, X = x => ox + x * sc, Z = z => oz + z * sc;
@@ -356,4 +389,4 @@ function drawMap(yaw, actors) {
   const p = home.player; mc.save(); mc.translate(X(p.x), Z(p.z)); mc.rotate(-yaw); mc.fillStyle = '#fff'; mc.beginPath(); mc.moveTo(0, -8); mc.lineTo(5.5, 6); mc.lineTo(0, 3); mc.lineTo(-5.5, 6); mc.fill(); mc.restore();
 }
 
-export function initUI() { renderQuests(); ui.tour = $('#opt-tour').checked; renderQuests(); }
+export function initUI() { if (!initUI.done) { initUI.done = true; initPlan(); loadSavedProject(); } renderQuests(); ui.tour = $('#opt-tour').checked; renderQuests(); }

@@ -13,4 +13,5 @@ Keep all files of this folder together; the desktop icon points to this folder.
 
 CONTROLS
   W A S D walk | Mouse look | E use | Q inspect / choose model | Tab phone app
-  C cameras | P ray-traced photo | X disarm alarm | H help
+  F control centre (2D plan, add / remove items) | C cameras | P ray-traced photo
+  X disarm alarm | H help
