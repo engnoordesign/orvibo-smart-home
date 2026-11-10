@@ -37,7 +37,7 @@ Touch devices get an on-screen joystick and buttons.
 ## The apartment
 
 Living room, open kitchen, guest bedroom, master bedroom with en-suite bathroom, balcony and the
-building corridor outside the entry door. 68 simulated devices:
+building corridor outside the entry door. More than 60 simulated devices:
 
 - **Smart lock** — fingerprint, face, PIN, card, one-time PIN, remote unlock, doorbell, auto-lock, tamper alarm after five failures
 - **MixPad** panels (living room, master) and **MixSwitch** keys in every room, including scene keys
