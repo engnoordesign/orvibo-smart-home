@@ -98,7 +98,7 @@ function mapSVG() {
   for (const d of everything()) {
     if (!d.mp) continue; const inst = d.installed !== false; if (!inst && !custom) continue;
     const on = inst && active(d), alert = inst && ((d.type === 'contact' && d.state.open) || (d.type === 'hazard' && d.state.alarm) || (d.type === 'camera' && d.state.rec));
-    s += `<g class="dv ${on ? 'on' : ''} ${alert ? 'alert' : ''} ${inst ? '' : 'ghost'} ${P.sel === d.id ? 'sel' : ''}" data-a="pdev" data-id="${d.id}" transform="translate(${d.mp.x.toFixed(2)} ${d.mp.z.toFixed(2)})"><title>${d.name} — ${ROOMS[d.room].name}</title><circle r="0.22" style="--c:${COL[d.type] || '#aaa'}"/><text y="0.02">${ICON[d.type] || '•'}</text></g>`;
+    s += `<g class="dv ${on ? 'on' : ''} ${alert ? 'alert' : ''} ${inst ? '' : 'ghost'} ${P.sel === d.id ? 'sel' : ''}" data-a="pdev" data-id="${d.id}" transform="translate(${d.mp.x.toFixed(2)} ${d.mp.z.toFixed(2)})"><title>${d.name} — ${ROOMS[d.room].name}</title><circle class="hit" r="0.36"/><circle r="0.22" style="--c:${COL[d.type] || '#aaa'}"/><text y="0.02">${ICON[d.type] || '•'}</text></g>`;
   }
   for (const a of actors) if (a.active) s += `<circle class="actor ${a.name}" cx="${a.x.toFixed(2)}" cy="${a.z.toFixed(2)}" r="0.2"/>`;
   const p = home.player; s += `<g transform="translate(${p.x.toFixed(2)} ${p.z.toFixed(2)}) rotate(${(-(ui.yaw || 0) * 180 / Math.PI).toFixed(0)})"><path class="me" d="M0 -0.34 L0.22 0.24 L0 0.12 L-0.22 0.24 Z"/></g>`;
@@ -149,10 +149,10 @@ function customSide() {
     <div class="chips"><button data-a="pexp" data-v="csv">Download list (CSV)</button><button data-a="pexp" data-v="copy">Copy list</button><button data-a="pexp" data-v="json">Export project</button><button data-a="pimp">Import project</button><button data-a="preset" data-v="full">Reset</button></div>`;
 }
 
-let lastSide = '';
+let lastSide = '', lastMap = '';
 export function renderPlan(mapOnly) {
   if (ui.open !== 'plan' && !ui.site) return;
-  $('#plan-map').innerHTML = mapSVG();
+  const svg = mapSVG(); if (svg !== lastMap) { lastMap = svg; $('#plan-map').innerHTML = svg; }      // redraw only when something changed
   if (mapOnly) return;
   $('#plan-top').innerHTML = `<div class="brand">CONTROL CENTRE</div><span class="mut">${fmtTime()}${project.customer ? ' · ' + project.customer : ''}</span>${secChip()}
     <div class="seg">${[['disarmed', 'Disarm'], ['home', 'Arm Home'], ['away', 'Arm Away']].map(([v, l]) => `<button class="${home.security.mode === v ? 'on' : ''}" data-a="arm" data-v="${v}">${l}</button>`).join('')}</div>

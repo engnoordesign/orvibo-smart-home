@@ -17,10 +17,26 @@ import { focusCategory } from './plan.js';
 import { ui, initUI, updateHUD, toggle, closeOverlay, cctvGrid, cctvCams, paintFeeds, refreshPlanMap } from './ui.js';
 
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+// The WebGL renderer is created only when the simulation is first entered, so the website and the
+// 2D diagram work on every device, including ones that cannot do 3D.
+let renderer = null;
+function createRenderer() {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+}
+// The simulator always runs in landscape. `view` is its size in its own (landscape) coordinates:
+// on a phone held upright the whole simulator is turned 90° so the picture stays landscape.
+const simEl = document.getElementById('sim'), view = { w: innerWidth, h: innerHeight, rot: false };
+let inSim = false;
+function layout() {
+  const rot = inSim && isTouch && innerHeight > innerWidth;
+  view.rot = rot; view.w = rot ? innerHeight : innerWidth; view.h = rot ? innerWidth : innerHeight;
+  simEl.classList.toggle('rot', rot); simEl.classList.toggle('compact', view.h < 540);
+  simEl.style.setProperty('--sw', view.w + 'px'); simEl.style.setProperty('--sh', view.h + 'px');
+}
+const toLocal = (dx, dy) => view.rot ? [dy, -dx] : [dx, dy];      // screen movement → simulator movement
 
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 400); camera.rotation.order = 'YXZ'; scene.add(camera);
 const player = { x: 5.7, z: 10.9, yaw: 0, pitch: 0, vx: 0, vz: 0, bob: 0, moving: false };
@@ -38,7 +54,7 @@ function applyQuality(q) {
   const dpr = window.devicePixelRatio || 1;
   // Low / Balanced / High adapt their resolution to hold a smooth frame rate.
   // Ultra renders at least 3840 px wide internally (true 4K, supersampled on smaller screens) and never scales down.
-  basePR = q === 'low' ? Math.min(dpr, 1) : q === 'balanced' ? Math.min(dpr, 1.25) : q === 'ultra' ? clamp(Math.max(dpr, 3840 / innerWidth), 1, 3) : Math.min(dpr, 1.5);
+  basePR = q === 'low' ? Math.min(dpr, isTouch ? 1.5 : 1) : q === 'balanced' ? Math.min(dpr, 1.25) : q === 'ultra' ? clamp(Math.max(dpr, 3840 / view.w), 1, 3) : Math.min(dpr, 1.5);
   adaptive = q !== 'ultra'; resScale = 1; ceilUntil = 0;
   const rich = q === 'high' || q === 'ultra';
   useBloom = q !== 'low'; if (gtao) gtao.enabled = rich; mirrorsOn = q !== 'low';
@@ -50,11 +66,12 @@ function applyQuality(q) {
 }
 let basePR = 1, resScale = 1, ceilUntil = 0, adaptive = true, mirrorsOn = true, good = 0, poolQ = null;
 function resize() {
-  const w = innerWidth, h = innerHeight;
+  layout(); if (!renderer) return;
+  const w = view.w, h = view.h;
   renderer.setPixelRatio(basePR * resScale); renderer.setSize(w, h, false); composer?.setPixelRatio(renderer.getPixelRatio()); composer?.setSize(w, h);
   camera.aspect = w / h; camera.updateProjectionMatrix();
 }
-addEventListener('resize', resize);
+addEventListener('resize', resize); addEventListener('orientationchange', () => setTimeout(resize, 250));
 ui.onQuality = applyQuality;
 
 // ---------- ray-traced photo mode (progressive path tracing of the current view) ----------
@@ -66,7 +83,7 @@ async function photo() {
   box.classList.remove('hidden'); lab.textContent = 'Preparing the ray tracer…'; document.exitPointerLock?.();
   try {
     const { WebGLPathTracer } = await import('three-gpu-pathtracer');
-    if (!pt) { pt = new WebGLPathTracer(renderer); pt.bounces = 6; pt.filterGlossyFactor = 0.5; pt.dynamicLowRes = true; pt.minSamples = 1; pt.renderScale = Math.min(1, 1600 / (innerWidth * renderer.getPixelRatio())); pt.tiles.set(2, 2); }
+    if (!pt) { pt = new WebGLPathTracer(renderer); pt.bounces = 6; pt.filterGlossyFactor = 0.5; pt.dynamicLowRes = true; pt.minSamples = 1; pt.renderScale = Math.min(1, 1600 / (view.w * renderer.getPixelRatio())); pt.tiles.set(2, 2); }
     // a soft sky dome stands in for the pre-filtered environment while tracing
     const sky = scene.background, k = 0.25 + 2.2 * dayFactor, data = new Float32Array(4 * 8 * 4);
     for (let i = 0; i < 32; i++) data.set([sky.r * k, sky.g * k, sky.b * k, 1], i * 4);
@@ -124,12 +141,12 @@ const stick = { x: 0, y: 0 };
 if (isTouch) {
   document.body.classList.add('touch');
   const st = document.getElementById('stick'), knob = document.getElementById('knob');
-  const mv = e => { const r = st.getBoundingClientRect(), t = e.targetTouches[0]; let x = (t.clientX - r.left - 60) / 60, y = (t.clientY - r.top - 60) / 60; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } stick.x = x; stick.y = y; knob.style.transform = `translate(${x * 35}px,${y * 35}px)`; e.preventDefault(); };
+  const mv = e => { const r = st.getBoundingClientRect(), t = e.targetTouches[0]; let [x, y] = toLocal(t.clientX - (r.left + r.width / 2), t.clientY - (r.top + r.height / 2)); x /= 60; y /= 60; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; } stick.x = x; stick.y = y; knob.style.transform = `translate(${x * 35}px,${y * 35}px)`; e.preventDefault(); };
   st.addEventListener('touchstart', mv, { passive: false }); st.addEventListener('touchmove', mv, { passive: false });
   st.addEventListener('touchend', () => { stick.x = stick.y = 0; knob.style.transform = ''; });
   let last = null;
   canvas.addEventListener('touchstart', e => { const t = e.changedTouches[0]; last = { id: t.identifier, x: t.clientX, y: t.clientY }; }, { passive: true });
-  canvas.addEventListener('touchmove', e => { for (const t of e.changedTouches) if (last && t.identifier === last.id) { player.yaw -= (t.clientX - last.x) * 0.005; player.pitch = clamp(player.pitch - (t.clientY - last.y) * 0.005, -1.45, 1.45); last.x = t.clientX; last.y = t.clientY; } e.preventDefault(); }, { passive: false });
+  canvas.addEventListener('touchmove', e => { for (const t of e.changedTouches) if (last && t.identifier === last.id) { const [dx, dy] = toLocal(t.clientX - last.x, t.clientY - last.y); player.yaw -= dx * 0.005; player.pitch = clamp(player.pitch - dy * 0.005, -1.45, 1.45); last.x = t.clientX; last.y = t.clientY; } e.preventDefault(); }, { passive: false });
   document.querySelectorAll('#touch button').forEach(b => b.addEventListener('click', () => ({ use: interact, info: inspect, app: () => toggle('phone'), cam: () => toggle('cctv'), map: () => toggle('plan') })[b.dataset.t]()));
 }
 
@@ -191,15 +208,15 @@ function renderTvCameras() {
 function renderAppFeeds(h) {
   const els = document.querySelectorAll('canvas.feed'); if (!els.length) return;
   const ids = [...new Set([...els].map(e => e.dataset.cam))].filter(id => has(id) && dev(id).state.on); if (!ids.length) return;
-  const d = dev(ids[feedTick++ % ids.length]), pr = renderer.getPixelRatio(), fw = Math.min(320, innerWidth), fh = fw * 9 / 16;
+  const d = dev(ids[feedTick++ % ids.length]), pr = renderer.getPixelRatio(), fw = Math.min(320, view.w), fh = fw * 9 / 16;
   renderer.setRenderTarget(null); renderer.setScissorTest(true); renderer.setViewport(0, 0, fw, fh); renderer.setScissor(0, 0, fw, fh);
   d.camera.aspect = 16 / 9; d.camera.updateProjectionMatrix(); renderer.render(scene, d.camera);
-  renderer.setScissorTest(false); renderer.setViewport(0, 0, innerWidth, h);
+  renderer.setScissorTest(false); renderer.setViewport(0, 0, view.w, h);
   const cv = renderer.domElement, sw = Math.floor(fw * pr), sh = Math.floor(fh * pr);
   paintFeeds(d.id, cv, 0, cv.height - sh, sw, sh);
 }
 function render() {
-  const w = innerWidth, h = innerHeight, cams = cctvCams(), grid = cctvGrid(cams.length);
+  const w = view.w, h = view.h, cams = cctvCams(), grid = cctvGrid(cams.length);
   if (ui.open === 'cctv') {
     renderer.setScissorTest(true);
     cams.forEach((d, i) => {
@@ -219,11 +236,12 @@ function render() {
   if (ui.open && frame % 3 === 0) renderAppFeeds(h);     // drawn first, then covered by the main picture
   if (useBloom) composer.render(); else renderer.render(scene, camera);
   if (ui.pip && has(ui.pip) && (!ui.open || ui.open === 'phone')) {
-    const r = document.getElementById('pip').getBoundingClientRect(), c = dev(ui.pip).camera;
-    if (r.width) {
+    const el = document.getElementById('pip'), hud = el.offsetParent, c = dev(ui.pip).camera;      // layout coordinates stay correct when the view is turned
+    if (hud && el.offsetWidth) {
+      const x = hud.offsetLeft + el.offsetLeft + el.clientLeft, y = h - (hud.offsetTop + el.offsetTop + el.clientTop) - el.clientHeight, pw = el.clientWidth, ph = el.clientHeight;
       renderer.setRenderTarget(null); renderer.setScissorTest(true);
-      renderer.setViewport(r.left, h - r.bottom, r.width, r.height); renderer.setScissor(r.left, h - r.bottom, r.width, r.height);
-      c.aspect = r.width / r.height; c.updateProjectionMatrix(); renderer.render(scene, c);
+      renderer.setViewport(x, y, pw, ph); renderer.setScissor(x, y, pw, ph);
+      c.aspect = pw / ph; c.updateProjectionMatrix(); renderer.render(scene, c);
       renderer.setScissorTest(false); renderer.setViewport(0, 0, w, h);
     }
   }
@@ -290,27 +308,46 @@ function boot() {
 }
 // Graphics are prepared the first time the simulation is entered, so the website itself stays light.
 function initGraphics() {
+  createRenderer();
   const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
   setupComposer(); applyQuality(ui.quality); updateSky(home.time);
   updatePool(camera.position, home.player.room);
   try { renderer.compile(scene, camera); } catch (e) { /* shaders compile lazily instead */ }
   gfx = true;
 }
+// Phones and tablets: go full screen and ask the browser to hold landscape. Where that is refused
+// (for example on iPhones) the rotated layout in layout() does the same job.
+function goLandscape(on) {
+  try {
+    if (on) { const p = document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }); const lockIt = () => screen.orientation?.lock?.('landscape')?.catch?.(() => { }); if (p?.then) p.then(lockIt, lockIt); else lockIt(); }
+    else { screen.orientation?.unlock?.(); if (document.fullscreenElement) document.exitFullscreen?.()?.catch?.(() => { }); }
+  } catch (e) { /* not supported: the rotated layout takes over */ }
+}
+function showSim(on) {
+  inSim = on; document.documentElement.classList.toggle('in-sim', on); simEl.classList.toggle('hidden', !on);
+  (on ? simEl : document.body).appendChild(document.getElementById('toasts'));     // messages turn with the simulator
+  ui.site = !on; ui.dockPlan?.(!on); layout();
+}
+let entering = false;
 async function enterSim() {
-  if (started) return;
-  document.documentElement.classList.add('in-sim'); document.getElementById('sim').classList.remove('hidden'); document.getElementById('hud').classList.remove('hidden');
-  ui.site = false; ui.dockPlan?.(false);
-  if (!gfx) { document.getElementById('sim-loading').classList.remove('hidden'); await new Promise(r => setTimeout(r, 30)); initGraphics(); document.getElementById('sim-loading').classList.add('hidden'); }
+  if (started || entering) return; entering = true;
+  if (isTouch) goLandscape(true);                 // must happen inside the tap that started it
+  showSim(true); document.getElementById('hud').classList.remove('hidden');
+  try {
+    if (!gfx) { document.getElementById('sim-loading').classList.remove('hidden'); await new Promise(r => setTimeout(r, 30)); initGraphics(); document.getElementById('sim-loading').classList.add('hidden'); }
+  } catch (e) {
+    console.error(e); document.getElementById('sim-loading').classList.add('hidden'); entering = false; if (isTouch) goLandscape(false); showSim(false);
+    notify('3D is not available on this device', 'The browser could not start WebGL 2. The website and the live diagram still work.', 'warn'); return;
+  }
   audio.init(); resize(); initUI();
-  started = true; clock.last = performance.now(); fAcc = fN = 0; lock(); raf = requestAnimationFrame(loop);
-  if (!welcomed) { welcomed = true; setTimeout(() => notify('Welcome to apartment A·1204', 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600); }
+  started = true; entering = false; clock.last = performance.now(); fAcc = fN = 0; lock(); raf = requestAnimationFrame(loop);
+  if (!welcomed) { welcomed = true; setTimeout(() => notify('Welcome to apartment A·1204', isTouch ? 'Walk to the door with the left stick and tap USE on the smart lock.' : 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600); }
 }
 function exitSim() {
   if (!started) return;
-  if (photoOn) photo(); started = false; cancelAnimationFrame(raf); keys.clear(); closeOverlay(false); document.exitPointerLock?.();
+  if (photoOn) photo(); started = false; cancelAnimationFrame(raf); keys.clear(); stick.x = stick.y = 0; closeOverlay(false); document.exitPointerLock?.();
   audio.setMusic(0, false); audio.siren(false);
-  document.documentElement.classList.remove('in-sim'); document.getElementById('sim').classList.add('hidden');
-  ui.site = true; ui.dockPlan?.(true);
+  if (isTouch) goLandscape(false); showSim(false);
 }
 ui.enterSim = enterSim; ui.exitSim = exitSim;
 document.getElementById('exit-sim').addEventListener('click', exitSim);
@@ -325,6 +362,6 @@ setInterval(() => {
 
 
 // handy for demos and automated tests
-window.SIM = { stats: () => { renderer.info.autoReset = false; renderer.info.reset(); render(); const r = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length }; renderer.info.autoReset = true; return r; }, toggle, home, set, dev, player, runScene, arm, bus, ui, camera, renderer, scene, photo, enterSim, exitSim, get pt() { return pt; }, get started() { return started; } };
+window.SIM = { view, get renderer() { return renderer; }, stats: () => { renderer.info.autoReset = false; renderer.info.reset(); render(); const r = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length }; renderer.info.autoReset = true; return r; }, toggle, home, set, dev, player, runScene, arm, bus, ui, camera, scene, photo, enterSim, exitSim, get pt() { return pt; }, get started() { return started; } };
 if (window.DH) Object.assign(window.DH, { enter: enterSim, exit: exitSim, applyQuality: q => { ui.quality = q; if (gfx) applyQuality(q); }, focusCategory, bus, home, ui });
 try { boot(); window.DH?.onReady?.(); } catch (e) { console.error(e); window.DH?.onError?.(e); }

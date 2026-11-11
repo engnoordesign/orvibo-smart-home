@@ -1,8 +1,10 @@
-// Cloudflare Workers configuration: the whole site is served as static assets (no server code).
-// The build step copies only the public website files into dist/, which is what gets published.
+// Cloudflare Workers configuration: the site is served as static assets (no server code).
+// The build step publishes the single-file edition (everything bundled and minified in one page,
+// so phones load it in one request) together with the editable site-config.json.
+// Rebuild that file with tools/build-standalone.sh after changing the source.
 {
   "name": "orvibo-smart-home",
   "compatibility_date": "2026-01-01",
-  "build": { "command": "rm -rf dist && mkdir dist && cp -r index.html favicon.png site-config.json css js vendor standalone dist/" },
+  "build": { "command": "rm -rf dist && mkdir dist && cp \"standalone/ORVIBO Smart Home Simulator.html\" dist/index.html && cp favicon.png site-config.json dist/" },
   "assets": { "directory": "./dist" }
 }

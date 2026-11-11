@@ -100,6 +100,11 @@ function syncCatalog() {
 }
 
 // ---------- page ----------
+// A visitor's own choices (graphics level, tour) are kept apart from the site configuration.
+const TOUCH = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
+let prefs = {}; try { prefs = JSON.parse(localStorage.getItem('dh-prefs') || '{}'); } catch (e) { /* ignore */ }
+const pref = k => prefs[k] ?? (k === 'quality' ? (TOUCH ? 'low' : cfg.sim.quality) : cfg.sim.tour);      // phones and tablets start on the fastest level
+const setPref = (k, v) => { prefs[k] = v; try { localStorage.setItem('dh-prefs', JSON.stringify(prefs)); } catch (e) { /* private mode */ } };
 let filter = 'all', engine = 'loading';
 const sec = id => cfg.sections.find(s => s.id === id) || { on: false };
 const head = s => `<div class="shead"><h2>${esc(s.title)}</h2>${s.sub ? `<p>${esc(s.sub)}</p>` : ''}</div>`;
@@ -125,11 +130,11 @@ const SECTIONS = {
   },
   apartment: s => `<section id="apartment">${head(s)}<div id="plan-slot"></div><div class="legend"><span><i style="background:#ffc65c"></i>light on</span><span><i style="background:#3ddc97"></i>presence</span><span><i style="background:#ff5c5c"></i>open / alert</span><span><i style="background:#5ab8ff"></i>window</span><span>▲ you</span></div></section>`,
   simulator: s => `<section id="simulator"><div class="simcard">${head(s)}
-      <div class="simopts"><label>Graphics <select data-s="quality">${[['low', 'Low — fastest'], ['balanced', 'Balanced'], ['high', 'High'], ['ultra', 'Ultra 4K']].map(([v, l]) => `<option value="${v}" ${cfg.sim.quality === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label><input type="checkbox" data-s="tour" ${cfg.sim.tour ? 'checked' : ''}> Guided tour</label></div>
+      <div class="simopts"><label>Graphics <select data-s="quality">${[['low', 'Low — fastest'], ['balanced', 'Balanced'], ['high', 'High'], ['ultra', 'Ultra 4K']].map(([v, l]) => `<option value="${v}" ${pref('quality') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label><input type="checkbox" data-s="tour" ${pref('tour') ? 'checked' : ''}> Guided tour</label></div>
       ${enterBtn(cfg.hero.cta, 'cta big')}
-      <div class="keys">${[['W A S D', 'walk'], ['Mouse', 'look'], ['E', 'use'], ['Q', 'inspect'], ['Tab', 'phone app'], ['F', 'control centre'], ['C', 'cameras'], ['Esc', 'free the mouse']].map(([k, v]) => `<span><b>${k}</b>${v}</span>`).join('')}</div>
-      <p class="fine">Runs in your browser. A computer with a mouse gives the best experience; if it feels slow, choose “Low”.</p></div></section>`,
+      <div class="keys">${(TOUCH ? [['Left stick', 'walk'], ['Drag', 'look around'], ['USE', 'operate a device'], ['INFO', 'details & model'], ['APP', 'phone app'], ['MAP', 'control centre'], ['CAM', 'cameras']] : [['W A S D', 'walk'], ['Mouse', 'look'], ['E', 'use'], ['Q', 'inspect'], ['Tab', 'phone app'], ['F', 'control centre'], ['C', 'cameras'], ['Esc', 'free the mouse']]).map(([k, v]) => `<span><b>${k}</b>${v}</span>`).join('')}</div>
+      <p class="fine">${TOUCH ? 'The simulation always plays in landscape: turn your phone sideways. If it feels slow, keep Graphics on “Low”.' : 'Runs in your browser. If it feels slow, choose “Low”.'}</p></div></section>`,
   contact: s => {
     const b = cfg.brand, rows = [['Phone', b.phone, b.phone && `tel:${b.phone}`], ['WhatsApp', b.whatsapp, b.whatsapp && `https://wa.me/${b.whatsapp.replace(/\D/g, '')}`], ['Email', b.email, b.email && `mailto:${b.email}`], ['Address', b.address], ['Hours', b.hours]].filter(r => r[1]);
     return `<section id="contact">${head(s)}<div class="contact">${rows.map(([k, v, h]) => `<div><small>${k}</small>${h ? `<a href="${esc(h)}">${esc(v)}</a>` : `<b>${esc(v)}</b>`}</div>`).join('') || '<div><small>Contact details</small><b>Add them in the admin panel.</b></div>'}</div></section>`;
@@ -157,14 +162,14 @@ function render() {
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-s]'); if (!el) return; const v = el.dataset.v;
   switch (el.dataset.s) {
-    case 'enter': if (window.DH.ui) window.DH.ui.tour = !!cfg.sim.tour; window.DH.applyQuality?.(cfg.sim.quality); window.DH.enter?.(); break;
+    case 'enter': if (window.DH.ui) window.DH.ui.tour = !!pref('tour'); window.DH.applyQuality?.(pref('quality')); window.DH.enter?.(); break;
     case 'filter': filter = v; render(); break;
     case 'show': $('#apartment')?.scrollIntoView({ behavior: 'smooth' }); if (window.DH.focusCategory && !window.DH.focusCategory(v)) toast('This item is not installed in the current project', 'Switch it on under “Customise project”.'); break;
     case 'admin': openAdmin(); break;
   }
 });
 document.addEventListener('change', e => {
-  const k = e.target.dataset?.s; if (k === 'quality') { cfg.sim.quality = e.target.value; save(); } if (k === 'tour') { cfg.sim.tour = e.target.checked; save(); }
+  const k = e.target.dataset?.s; if (k === 'quality') setPref('quality', e.target.value); if (k === 'tour') setPref('tour', e.target.checked);
 });
 const toast = (title, body) => window.DH.bus?.emit('notify', { title, body, level: 'info' });
 
@@ -245,7 +250,7 @@ $('#admin').addEventListener('click', e => {
 });
 
 // ---------- start ----------
-window.DH = { sim: cfg.sim, onReady() { engine = 'ready'; render(); }, onError() { engine = 'error'; render(); } };
+window.DH = { sim: cfg.sim, onReady() { engine = 'ready'; render(); }, onError() { engine = 'error'; render(); const m = document.querySelector('#plan-map'); if (m) m.innerHTML = '<div class="plan-wait">The live diagram could not start in this browser.</div>'; } };
 (async () => {
   await load(); window.DH.sim = cfg.sim; syncCatalog(); render();
   if (location.hash === '#admin') openAdmin();

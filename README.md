@@ -37,8 +37,9 @@ The repository includes `wrangler.jsonc`, so it deploys as a static-assets Worke
 npx wrangler deploy
 ```
 
-The build step in `wrangler.jsonc` copies only the website files into `dist/` and publishes that
-folder; the README, tools and Git data are not uploaded.
+The build step in `wrangler.jsonc` publishes the single-file edition (`standalone/…html`, everything
+bundled and minified so phones load it in one request) as `index.html`, plus `site-config.json`.
+Run `tools/build-standalone.sh` after changing the source so the published file is current.
 
 ## Admin panel
 
@@ -127,6 +128,17 @@ fire / gas / leak protection and the emergency button. Custom IF → THEN rules 
 
 Security simulations (app → Security): balcony break-in, forced entry door, PIN guessing at the lock,
 visitor at the doorbell, smoke, gas leak, water leak and SOS.
+
+## Phones, tablets and computers
+
+- The website and the 2D diagram adapt to any screen width; on phones the plan pans sideways and
+  icons have larger touch targets
+- **The simulation always plays in landscape.** On phones and tablets it goes full screen and asks
+  the browser to lock landscape; where the browser refuses (iPhone), the whole simulator is turned
+  90° instead, so the picture is landscape either way and steering follows the picture
+- Touch controls: left stick to walk, drag to look, and USE / INFO / APP / MAP / CAM buttons
+- Phones and tablets start on the fastest graphics level; the choice is remembered per device
+- If a device cannot start 3D at all, the website and the diagram keep working
 
 ## Speed and stability
 

@@ -72,8 +72,8 @@ body.touch #touch { display: block; } body.touch #keys { display: none; }
 
 /* ---------- phone / MixPad ---------- */
 #device { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(4, 6, 10, .45); backdrop-filter: blur(3px); }
-#frame { width: min(400px, 96vw); height: min(800px, 94vh); background: #0c0f15; border: 9px solid #1c1f26; border-radius: 44px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 90px rgba(0, 0, 0, .7), 0 0 0 2px #333842; position: relative; }
-#device.mixpad #frame { width: min(1000px, 96vw); height: min(620px, 90vh); border-radius: 18px; border-width: 14px; border-color: #15171c; }
+#frame { width: min(400px, calc(var(--sw) * .96)); height: min(800px, calc(var(--sh) * .94)); background: #0c0f15; border: 9px solid #1c1f26; border-radius: 44px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 90px rgba(0, 0, 0, .7), 0 0 0 2px #333842; position: relative; }
+#device.mixpad #frame { width: min(1000px, calc(var(--sw) * .96)); height: min(620px, calc(var(--sh) * .9)); border-radius: 18px; border-width: 14px; border-color: #15171c; }
 #notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 22px; background: #1c1f26; border-radius: 0 0 14px 14px; z-index: 2; } #device.mixpad #notch { display: none; }
 #device-close { position: fixed; top: 14px; right: 16px; background: var(--panel); border: 1px solid var(--line); padding: 8px 16px; border-radius: 20px; }
 #app { flex: 1; overflow-y: auto; padding: 34px 16px 16px; scrollbar-width: thin; } #device.mixpad #app { padding-top: 16px; }
@@ -109,7 +109,7 @@ select, input[type=text] { background: #232a36; color: var(--txt); border: 1px s
 
 /* ---------- lock & inspect ---------- */
 #lockui, #inspect, #help { position: fixed; inset: 0; z-index: 35; display: grid; place-items: center; background: rgba(4, 6, 10, .5); backdrop-filter: blur(3px); }
-.modal { width: min(440px, 94vw); max-height: 92vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 20px 22px; backdrop-filter: blur(12px); }
+.modal { width: min(440px, calc(var(--sw) * .94)); max-height: calc(var(--sh) * .92); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 20px 22px; backdrop-filter: blur(12px); }
 .modal h2 { margin: 0 0 2px; font-size: 20px; } .modal .mut { color: var(--mut); font-size: 13px; }
 .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; } .keypad button { background: #1b2230; border: 1px solid var(--line); border-radius: 12px; padding: 12px 0; font-size: 18px; }
 .pin { letter-spacing: .5em; font: 22px monospace; text-align: center; height: 30px; color: var(--blue); }
@@ -152,7 +152,7 @@ select, input[type=text] { background: #232a36; color: var(--txt); border: 1px s
 
 /* ---------- phone docked on the right so the apartment stays visible ---------- */
 #device.phone { background: none; backdrop-filter: none; place-items: center end; padding-right: 20px; pointer-events: none; }
-#device.phone #frame { pointer-events: auto; width: min(372px, 96vw); height: min(760px, 95vh); }
+#device.phone #frame { pointer-events: auto; width: min(372px, calc(var(--sw) * .96)); height: min(760px, calc(var(--sh) * .95)); }
 #device.phone #device-close { pointer-events: auto; right: 410px; }
 body.phone-open #quests { display: none; } body.phone-open #toasts, body.phone-open #pip { right: 412px; }
 @media (max-width: 900px) { #device.phone { place-items: center; padding-right: 0; } #device.phone #device-close { right: 16px; } body.phone-open #toasts, body.phone-open #pip { right: 16px; } }
@@ -165,8 +165,8 @@ body.phone-open #quests { display: none; } body.phone-open #toasts, body.phone-o
 #plan-top .hscroll { flex: 1; min-width: 0; padding: 0; } #plan-top .pill { padding: 6px 12px; } #plan-top .btn { white-space: nowrap; padding: 8px 14px; } #plan-top .mut { color: var(--mut); white-space: nowrap; }
 #plan-main { flex: 1; display: flex; min-height: 0; }
 #plan-map { flex: 1; min-width: 0; padding: 8px; display: grid; place-items: center; }
-#plan-svg { width: 100%; height: 100%; max-height: calc(100vh - 80px); } #plan-svg.adding { cursor: crosshair; }
-#plan-side { width: min(410px, 42vw); overflow-y: auto; padding: 12px 14px 20px; border-left: 1px solid var(--line); scrollbar-width: thin; }
+#plan-svg { width: 100%; height: 100%; max-height: calc(var(--sh) - 80px); } #plan-svg.adding { cursor: crosshair; }
+#plan-side { width: min(410px, calc(var(--sw) * .42)); overflow-y: auto; padding: 12px 14px 20px; border-left: 1px solid var(--line); scrollbar-width: thin; }
 #plan-side h3 { font-size: 12px; letter-spacing: .12em; color: var(--mut); margin: 16px 0 8px; text-transform: uppercase; }
 .ptabs { margin-bottom: 12px; }
 #plan-svg .room { fill: #1c2230; stroke: rgba(255, 255, 255, .25); stroke-width: .03; cursor: pointer; } #plan-svg .room.out { fill: #131822; stroke-dasharray: .12 .08; }
@@ -201,3 +201,44 @@ html.in-sim #site, html.in-sim #admin { display: none; }
 #plan:not(.embedded) { z-index: 130; }
 
 #quests { bottom: 50px; }
+
+/* ---------- every device: landscape simulator, touch layout, small screens ---------- */
+:root { --sw: 100vw; --sh: 100vh; }
+#sim { overscroll-behavior: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+canvas#c { touch-action: none; }
+/* phone held upright: the whole simulator is turned so it is still landscape */
+#sim.rot { inset: auto; top: 0; left: 0; width: var(--sw); height: var(--sh); transform-origin: 0 0; transform: translateX(var(--sh)) rotate(90deg); }
+#hud { left: env(safe-area-inset-left, 0px); right: env(safe-area-inset-right, 0px); }
+#plan-svg .dv circle.hit { fill: transparent !important; stroke: none !important; filter: none !important; animation: none !important; }
+body.touch #quests { display: none; }
+body.touch #exit-sim { padding: 9px 18px; opacity: .9; }
+body.touch #device-close { padding: 11px 18px; }
+body.touch .chips button, body.touch .btn { padding: 8px 13px; }
+#sim #plan-main { min-height: 0; }
+/* short screens (phones in landscape) */
+#sim.compact #minimap { display: none; }
+#sim.compact #status { padding: 6px 10px; min-width: 0; left: 10px; top: 8px; } #sim.compact #status .room { font-size: 14px; } #sim.compact #status .row { font-size: 11.5px; }
+#sim.compact #exit-sim { top: 8px; }
+#sim.compact #stick { left: 22px; bottom: 22px; }
+#sim.compact #touch button { transform: scale(.86); transform-origin: bottom right; }
+#sim.compact #touch button[data-t=map] { bottom: 190px; }
+#sim.compact #pip { width: 220px; height: 124px; top: 8px; } body.haspip #sim.compact #toasts { top: 140px; }
+#sim.compact #toasts { width: 250px; top: 8px; } #sim.compact .toast { padding: 6px 10px; font-size: 12.5px; }
+#sim.compact #alarm { padding: 6px 16px; } #sim.compact #alarm b { font-size: 14px; }
+#sim.compact #plan-top { padding: 6px 10px; gap: 8px; } #sim.compact #plan-top .brand, #sim.compact #plan-top .hscroll { display: none; } #sim.compact #plan-top .seg { flex: 1; }
+#sim.compact #plan-main { flex-direction: row; } #sim.compact #plan-side { width: 46%; height: auto; border-left: 1px solid var(--line); border-top: 0; }
+#sim.compact #plan-svg { max-height: calc(var(--sh) - 56px); }
+#sim.compact #frame { border-width: 5px; border-radius: 26px; } #sim.compact #notch { display: none; } #sim.compact #app { padding-top: 14px; }
+#sim.compact #cctv .cam { font-size: 11px; padding: 6px 8px; }
+#sim.compact .modal { padding: 12px 14px; } #sim.compact .keypad button { padding: 7px 0; font-size: 16px; } #sim.compact .lockopts button { padding: 7px 4px; } #sim.compact .lockopts button span { display: inline; font-size: 16px; margin-right: 4px; }
+#sim.compact .modal .keypad { grid-template-columns: repeat(6, 1fr); }
+/* the embedded diagram on phones: plan on top (scrolls sideways), controls underneath */
+@media (max-width: 900px) {
+  #plan.embedded { height: auto; min-height: 0; }
+  #plan.embedded #plan-map { overflow-x: auto; display: block; padding: 6px; -webkit-overflow-scrolling: touch; }
+  #plan.embedded #plan-svg { width: 680px; height: 590px; max-height: none; display: block; }
+  #plan.embedded #plan-side { height: auto; max-height: 70vh; }
+  #plan.embedded #plan-top { flex-wrap: wrap; } #plan.embedded #plan-top .brand { display: none; } #plan.embedded #plan-top .seg { flex: 1 1 100%; order: 3; }
+}
+
+#device-close { color: #e9edf2; }

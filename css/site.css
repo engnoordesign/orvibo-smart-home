@@ -18,12 +18,12 @@ body { background: var(--paper); color: var(--ink); }
 .tag { margin-top: 30px; color: #7f8a9b; font-size: 13.5px; }
 #site main section { padding: clamp(46px, 7vw, 86px) clamp(16px, 6vw, 90px); scroll-margin-top: 54px; } #site main section:nth-child(even) { background: #efece5; }
 .shead { max-width: 760px; margin-bottom: 30px; } .shead h2 { font: 300 clamp(28px, 3.6vw, 42px)/1.1 system-ui; } .shead p { color: var(--soft); margin: 10px 0 0; }
-.bgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.bgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 16px; }
 .bcard { background: var(--card); border: 1px solid var(--edge); border-radius: 18px; padding: 22px; } .bcard .bi { font-size: 30px; } .bcard h3 { font-size: 18px; margin: 10px 0 6px; } .bcard p { margin: 0; color: var(--soft); font-size: 14.5px; }
 .pfilter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; } .pfilter button { background: var(--card); border: 1px solid var(--edge); border-radius: 30px; padding: 7px 14px; font-size: 13.5px; color: var(--ink); } .pfilter button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 18px; align-items: start; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 18px; align-items: start; }
 .pcard { background: var(--card); border: 1px solid var(--edge); border-radius: 20px; padding: 22px; } .pcard p { color: var(--soft); font-size: 14.5px; margin: 12px 0; }
-.phead { display: flex; gap: 14px; align-items: center; } .pic { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 26px; background: color-mix(in srgb, var(--acc) 18%, #fff); flex: none; } .phead h3 { font-size: 18px; } .phead small { color: var(--soft); }
+.phead { display: flex; gap: 14px; align-items: center; } .pic { width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; font-size: 26px; background: #f5efe2; background: color-mix(in srgb, var(--acc) 18%, #fff); flex: none; } .phead h3 { font-size: 18px; } .phead small { color: var(--soft); }
 .adv { margin: 0 0 14px; padding: 0; list-style: none; } .adv li { position: relative; padding: 4px 0 4px 24px; font-size: 14.5px; } .adv li::before { content: "✓"; position: absolute; left: 0; color: var(--acc); font-weight: 700; }
 .pcard details { border-top: 1px solid var(--edge); padding-top: 10px; } .pcard summary { cursor: pointer; font-weight: 600; font-size: 14.5px; }
 .spec { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13.5px; } .spec th { text-align: left; color: var(--soft); font-weight: 500; padding: 5px 10px 5px 0; vertical-align: top; width: 38%; } .spec td { padding: 5px 0; } .spec tr { border-bottom: 1px solid #f0ede6; }
@@ -51,3 +51,20 @@ body.admin-open #site { margin-right: min(460px, 100vw); }
 .ops button { background: #232a36; color: #fff; width: 28px; height: 28px; border-radius: 8px; margin-left: 4px; } .ops button:disabled { opacity: .3; }
 .add { background: #232a36; color: #fff; padding: 9px 14px; border-radius: 10px; margin: 4px 6px 4px 0; } .add:hover { background: #2c3444; } .add.danger { background: #5a1d1d; } .row2 { margin-bottom: 8px; }
 .hint { color: #7f8a9b; font-size: 12.5px; margin: 6px 0 10px; } #pin { margin-bottom: 10px; font-size: 20px; letter-spacing: .3em; text-align: center; }
+
+/* ---------- phones and tablets ---------- */
+html { -webkit-text-size-adjust: 100%; }
+#site { overflow-x: hidden; }
+#site img, #site table { max-width: 100%; }
+.spec { table-layout: fixed; word-break: break-word; }
+#site nav { padding-left: max(clamp(16px, 4vw, 48px), env(safe-area-inset-left)); padding-right: max(clamp(16px, 4vw, 48px), env(safe-area-inset-right)); }
+@media (max-width: 720px) {
+  #site { font-size: 15px; }
+  .hbtn .cta, .hbtn .ghost { flex: 1 1 100%; text-align: center; box-sizing: border-box; }
+  .hstat { gap: 16px 26px; } .hstat b { font-size: 26px; }
+  .pfilter { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; } .pfilter button { flex: none; }
+  .cta.big { padding: 16px 28px; font-size: 17px; width: 100%; box-sizing: border-box; }
+  .simopts { gap: 12px; flex-direction: column; align-items: center; }
+  body.admin-open #site { margin-right: 0; }
+}
+@media (hover: none) { .cta:not(:disabled):hover, .navcta:not(:disabled):hover { transform: none; } }

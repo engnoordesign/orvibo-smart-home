@@ -350,7 +350,7 @@ bus.on('device', ({ d, patch, src }) => {
 });
 
 // ---------- HUD (called every frame) ----------
-const mm = $('#minimap'), mc = mm.getContext('2d'); let accS = 1, accM = 1, lastPrompt = '';
+const mm = $('#minimap'), mc = mm.getContext('2d'); let accS = 1, accM = 1, lastPrompt = '', lastStatus = '';
 export function updateHUD(dt, target, yaw, actors) {
   const p = home.player, s = home.security;
   // prompt
@@ -360,7 +360,7 @@ export function updateHUD(dt, target, yaw, actors) {
   $('#hud').classList.toggle('clean', ui.open === 'cctv' || ui.open === 'plan' || !$('#photo').classList.contains('hidden'));
   if (accS > 0.3) {
     accS = 0; const r = p.room, c = home.climate[r];
-    $('#status').innerHTML = `<div class="room">${ROOMS[r]?.name || 'Outside'}</div><div class="row">${fmtTime()} · ${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % RH` : `outdoor ${home.outdoor.temp.toFixed(0)} °C`}</div><div class="row">${secChip()} <span class="chip">${Math.round(home.energy)} W</span> <span class="chip">${ui.fps} fps</span>${home.music.playing ? ' <span class="chip">♪</span>' : ''}</div>`;
+    const st = `<div class="room">${ROOMS[r]?.name || 'Outside'}</div><div class="row">${fmtTime()} · ${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % RH` : `outdoor ${home.outdoor.temp.toFixed(0)} °C`}</div><div class="row">${secChip()} <span class="chip">${Math.round(home.energy)} W</span> <span class="chip">${ui.fps} fps</span>${home.music.playing ? ' <span class="chip">♪</span>' : ''}</div>`; if (st !== lastStatus) { lastStatus = st; $('#status').innerHTML = st; }
     const al = $('#alarm');
     if (s.alarm) { al.classList.remove('hidden'); al.innerHTML = `<b>⚠ ${s.alarm.title}</b><small>${s.alarm.where}</small><button data-a="arm" data-v="disarmed">Disarm (X)</button>`; } else al.classList.add('hidden');
     if (ui.pip && !s.alarm && (ui.pipUntil ? performance.now() > ui.pipUntil : !home.doorbell)) ui.pip = null;
@@ -395,7 +395,7 @@ function drawMap(yaw, actors) {
 ui.dockPlan = embed => {
   const el = $('#plan'), slot = $('#plan-slot');
   if (embed && slot) { slot.appendChild(el); el.classList.add('embedded'); el.classList.remove('hidden'); render(); }
-  else { document.body.appendChild(el); el.classList.remove('embedded'); el.classList.add('hidden'); }
+  else { $('#sim').appendChild(el); el.classList.remove('embedded'); el.classList.add('hidden'); }
 };
 export function refreshPlanMap() { if (ui.site && !hold && $('#plan-slot')) renderPlan(true); }
 export function initUI() { if (!initUI.done) { initUI.done = true; initPlan(); loadSavedProject(); } renderQuests(); }
