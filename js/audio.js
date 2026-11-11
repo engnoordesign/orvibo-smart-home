@@ -110,7 +110,7 @@ export const audio = {
     }
   },
   say(text) {
-    if (!this.voice || !('speechSynthesis' in window)) return;
+    if (!this.voice || !this.ready || !('speechSynthesis' in window)) return;
     try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 1; u.pitch = 1.05; u.volume = 0.9; speechSynthesis.speak(u); } catch (e) { /* voice is optional */ }
   },
 };

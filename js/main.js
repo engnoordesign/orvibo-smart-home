@@ -6,16 +6,18 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { scene, buildWorld, colliders, occluders, interactables, updaters, dirty, updateSky, sun, mirrors, hideInPhoto, dayFactor, freezeStatic } from './world.js';
-import { buildDevices, bounceLights } from './devices.js';
+import { scene, buildWorld, colliders, occluders, interactables, updaters, dirty, updateSky, sun, mirrors, hideInPhoto, dayFactor, freezeStatic, mergeStatic } from './world.js';
+import { buildDevices } from './devices.js';
+import { buildPool, updatePool, refreshShadows, photoLights } from './lights.js';
 import { buildActors, updateActors, actors } from './actors.js';
 import { home, bus, roomAt, ofType, dev, has, set, clamp, notify } from './state.js';
 import { tickSim, arm, runScene } from './sim.js';
 import { audio } from './audio.js';
-import { ui, initUI, updateHUD, toggle, closeOverlay, cctvGrid, cctvCams, paintFeeds } from './ui.js';
+import { focusCategory } from './plan.js';
+import { ui, initUI, updateHUD, toggle, closeOverlay, cctvGrid, cctvCams, paintFeeds, refreshPlanMap } from './ui.js';
 
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -40,12 +42,13 @@ function applyQuality(q) {
   adaptive = q !== 'ultra'; resScale = 1; ceilUntil = 0;
   const rich = q === 'high' || q === 'ultra';
   useBloom = q !== 'low'; if (gtao) gtao.enabled = rich; mirrorsOn = q !== 'low';
-  bounceLights.forEach(b => b.visible = rich);
-  const res = (l, n) => { if (l.shadow.mapSize.x !== n) { l.shadow.mapSize.set(n, n); l.shadow.map?.dispose(); l.shadow.map = null; } };
-  res(sun, q === 'ultra' ? 4096 : 2048); ofType('light').forEach(l => l.shadowLight && res(l.shadowLight, q === 'ultra' ? 1024 : 512)); dirty.all = true;
+  if (poolQ !== q) { buildPool(q); poolQ = q; }                  // number of real lights depends on the quality level
+  const n = q === 'ultra' ? 4096 : q === 'low' ? 1024 : 2048;
+  if (sun.shadow.mapSize.x !== n) { sun.shadow.mapSize.set(n, n); sun.shadow.map?.dispose(); sun.shadow.map = null; }
+  dirty.all = true;
   resize();
 }
-let basePR = 1, resScale = 1, ceilUntil = 0, adaptive = true, mirrorsOn = true, good = 0;
+let basePR = 1, resScale = 1, ceilUntil = 0, adaptive = true, mirrorsOn = true, good = 0, poolQ = null;
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setPixelRatio(basePR * resScale); renderer.setSize(w, h, false); composer?.setPixelRatio(renderer.getPixelRatio()); composer?.setSize(w, h);
@@ -58,7 +61,7 @@ ui.onQuality = applyQuality;
 let pt = null, photoOn = false, photoEnv = null, savedEnv = null;
 async function photo() {
   const box = document.getElementById('photo'), lab = document.getElementById('photo-s');
-  if (photoOn) { photoOn = false; box.classList.add('hidden'); scene.environment = savedEnv; hideInPhoto.forEach(o => o.visible = true); mirrors.forEach(m => m.visible = ui.quality !== 'low'); resize(); lock(); return; }
+  if (photoOn) { photoOn = false; photoLights(false); box.classList.add('hidden'); scene.environment = savedEnv; hideInPhoto.forEach(o => o.visible = true); mirrors.forEach(m => m.visible = ui.quality !== 'low'); resize(); lock(); return; }
   if (!started || ui.open) return;
   box.classList.remove('hidden'); lab.textContent = 'Preparing the ray tracer…'; document.exitPointerLock?.();
   try {
@@ -70,8 +73,8 @@ async function photo() {
     photoEnv?.dispose(); photoEnv = new THREE.DataTexture(data, 8, 4, THREE.RGBAFormat, THREE.FloatType); photoEnv.mapping = THREE.EquirectangularReflectionMapping; photoEnv.needsUpdate = true;
     savedEnv = scene.environment; scene.environment = photoEnv; scene.environmentIntensity = 1;
     hideInPhoto.forEach(o => o.visible = false); mirrors.forEach(m => m.visible = false);
-    scene.updateMatrixWorld(true); pt.setScene(scene, camera); photoOn = true;
-  } catch (e) { console.error(e); lab.textContent = 'Ray tracing is not supported on this device.'; setTimeout(() => box.classList.add('hidden'), 2500); if (savedEnv) scene.environment = savedEnv; hideInPhoto.forEach(o => o.visible = true); }
+    photoLights(true); scene.updateMatrixWorld(true); pt.setScene(scene, camera); photoOn = true;
+  } catch (e) { console.error(e); lab.textContent = 'Ray tracing is not supported on this device.'; setTimeout(() => box.classList.add('hidden'), 2500); if (savedEnv) scene.environment = savedEnv; photoLights(false); hideInPhoto.forEach(o => o.visible = true); }
 }
 ui.onPhoto = photo;
 
@@ -226,65 +229,102 @@ function render() {
   }
 }
 
-const clock = { last: performance.now(), elapsedTime: 0, getDelta() { const n = performance.now(), d = (n - this.last) / 1000; this.last = n; this.elapsedTime += d; return d; } }; let lastSun = -1; let fAcc = 0, fN = 0, lastSky = -1;
-function loop() {
-  requestAnimationFrame(loop);
+const clock = { last: performance.now(), elapsedTime: 0, getDelta() { const n = performance.now(), d = (n - this.last) / 1000; this.last = n; this.elapsedTime += d; return d; } };
+let lastSun = -1, fAcc = 0, fN = 0, lastSky = -1, raf = 0, errors = 0, gfx = false, welcomed = false;
+const cctvRef = new THREE.Vector3(3.5, 1.6, 6.5);
+
+function frameStep() {
   const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime; frame++;
-  if (photoOn) { try { pt.renderSample(); } catch (e) { console.error(e); photo(); } document.getElementById('photo-s').textContent = `${Math.floor(pt.samples)} samples per pixel`; return; }
-  if (started) {
-    // keep the walk-through smooth: measure the real frame rate and adapt the render resolution
-    if (raw < 0.5) { fAcc += raw; fN++; }
-    if (fAcc >= 1) {
-      const fps = fN / fAcc; ui.fps = Math.round(fps); fAcc = 0; fN = 0;
-      if (adaptive && ui.open !== 'cctv' && !document.hidden) {
-        if (fps < 45 && resScale > 0.5) { resScale = Math.max(0.5, resScale - (fps < 28 ? 0.2 : 0.1)); ceilUntil = t + 40; good = 0; resize(); }
-        else if (fps > 57 && resScale < 1 && t > ceilUntil) { if (++good >= 4) { resScale = Math.min(1, resScale + 0.1); good = 0; resize(); } } else good = 0;
-      }
-      ui.scale = resScale;
+  if (photoOn) { pt.renderSample(); document.getElementById('photo-s').textContent = `${Math.floor(pt.samples)} samples per pixel`; return; }
+  // keep the walk-through smooth: measure the real frame rate and adapt the render resolution (gently, to avoid hitches)
+  if (raw < 0.5) { fAcc += raw; fN++; }
+  if (fAcc >= 1) {
+    const fps = fN / fAcc; ui.fps = Math.round(fps); fAcc = 0; fN = 0;
+    if (adaptive && ui.open !== 'cctv' && !document.hidden) {
+      if (fps < 40 && resScale > 0.5) { resScale = Math.max(0.5, resScale - (fps < 24 ? 0.2 : 0.1)); ceilUntil = t + 60; good = 0; resize(); }
+      else if (fps > 57 && resScale < 1 && t > ceilUntil) { if (++good >= 10) { resScale = Math.min(1, resScale + 0.1); good = 0; resize(); } } else good = 0;
     }
-    move(dt); tickSim(dt, actors); updateActors(dt, player.yaw, player.moving, t);
-    if (frame % 2 === 0) pick();
-    // what the listener hears from the multi-room system
-    let lvl = 0, inRoom = false;
-    if (home.music.playing) for (const sp of ofType('speaker')) {
-      if (!sp.state.on) continue; const same = sp.room === home.player.room, d = Math.hypot(sp.pos.x - player.x, sp.pos.z - player.z);
-      lvl = Math.max(lvl, sp.state.vol / 100 * (same ? 1 / (1 + 0.07 * d * d) : 0.2 / (1 + 0.05 * d * d))); inRoom ||= same;
-    }
-    audio.setMusic(lvl * home.music.vol / 100 * (home.music.ducked ? 0.25 : 1) * 0.9, !inRoom);
-    updateHUD(dt, target, player.yaw, actors);
-  } else { // slow orbiting preview behind the start screen
-    camera.position.set(3.4 + Math.sin(t * 0.15) * 1.2, 1.7, 6.6 + Math.cos(t * 0.15) * 0.8); camera.rotation.set(-0.05, t * 0.12, 0);
+    ui.scale = resScale;
   }
+  move(dt); tickSim(dt, actors); updateActors(dt, player.yaw, player.moving, t);
+  if (frame % 2 === 0) pick();
+  // what the listener hears from the multi-room system
+  let lvl = 0, inRoom = false;
+  if (home.music.playing) for (const sp of ofType('speaker')) {
+    if (!sp.state.on) continue; const same = sp.room === home.player.room, d = Math.hypot(sp.pos.x - player.x, sp.pos.z - player.z);
+    lvl = Math.max(lvl, sp.state.vol / 100 * (same ? 1 / (1 + 0.07 * d * d) : 0.2 / (1 + 0.05 * d * d))); inRoom ||= same;
+  }
+  audio.setMusic(lvl * home.music.vol / 100 * (home.music.ducked ? 0.25 : 1) * 0.9, !inRoom);
+  updateHUD(dt, target, player.yaw, actors);
   for (const u of updaters) u(dt, t);
   if (home.time !== lastSky) { lastSky = home.time; updateSky(home.time); }
   if (frame % 12 === 0) for (const m of mirrors) m.visible = mirrorsOn && !photoOn && roomAt(m.position.x + (m.position.x < 7.5 ? -0.3 : 0.3), m.position.z) === home.player.room;
+  updatePool(ui.open === 'cctv' ? cctvRef : camera.position, ui.open === 'cctv' ? 'living' : home.player.room);
   if (Math.abs(home.time - lastSun) > 0.03) { lastSun = home.time; dirty.sun = true; }
-  if (dirty.all) { ofType('light').forEach(l => { if (l.shadowLight) l.shadowLight.shadow.needsUpdate = true; }); dirty.all = false; dirty.sun = true; }
-  if (dirty.living) { dev('l_liv_down').shadowLight.shadow.needsUpdate = true; dirty.living = false; }
+  if (dirty.all) { refreshShadows(); dirty.all = false; dirty.living = false; dirty.sun = true; }
+  if (dirty.living) { refreshShadows('living'); dirty.living = false; }
   if (dirty.sun) { sun.shadow.needsUpdate = true; dirty.sun = false; }
   render();
 }
-
-// ---------- boot ----------
-function boot() {
-  buildWorld(); freezeStatic(); buildDevices(); buildActors();
-  const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-  setupComposer(); applyQuality(ui.quality); initUI(); updateSky(home.time);
-  // a welcoming preview behind the title card
-  set('l_liv_down', { on: true, bri: 55 }, 'boot'); set('l_liv_strip', { on: true, bri: 70, rgb: '#ffb060' }, 'boot'); set('l_liv_spot', { on: true, bri: 70 }, 'boot'); set('l_kit_strip', { on: true }, 'boot');
-  home.log.length = 0;
-  try { renderer.compile(scene, camera); } catch (e) { /* shaders compile lazily instead */ }
-  loop();
-  const btn = document.getElementById('enter'); btn.disabled = false; btn.textContent = 'Enter the apartment';
-  btn.onclick = () => {
-    audio.init(); ui.tour = document.getElementById('opt-tour').checked; initUI();
-    ofType('light').forEach(l => set(l.id, { on: false, fade: 0.2 }, 'boot')); home.log.length = 0;
-    document.getElementById('start').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden');
-    started = true; lock();
-    setTimeout(() => notify('Welcome to apartment A·1204', 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600);
-  };
+function loop() {
+  if (!started) return; raf = requestAnimationFrame(loop);
+  try { frameStep(); errors = 0; }
+  catch (e) {                                   // never let one bad frame freeze the simulator
+    console.error(e); if (photoOn) { try { photo(); } catch (x) { /* ignore */ } }
+    if (++errors > 30) { exitSim(); notify('The 3D view stopped', 'Something went wrong while drawing. Try entering again with Low graphics.', 'warn'); }
+  }
 }
-try { boot(); } catch (e) { console.error(e); document.getElementById('enter').textContent = 'WebGL error — see console'; }
+
+// The browser can take the graphics context away (driver reset, too many tabs): recover instead of going black.
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); cancelAnimationFrame(raf); notify('Graphics were reset by the browser', 'Recovering…', 'warn'); });
+canvas.addEventListener('webglcontextrestored', () => { if (ui.quality !== 'low') { ui.quality = 'low'; applyQuality('low'); } dirty.all = true; if (started) { clock.last = performance.now(); raf = requestAnimationFrame(loop); } notify('3D view recovered', 'Graphics were set to Low for stability.', 'ok'); });
+
+// ---------- boot: build the apartment (no drawing yet) ----------
+function boot() {
+  const cfg = (window.DH && window.DH.sim) || {};
+  if (cfg.quality) ui.quality = cfg.quality; if (cfg.time != null) home.time = +cfg.time; if (cfg.season) home.season = cfg.season; if (cfg.tour != null) ui.tour = !!cfg.tour;
+  buildWorld(); const stat = mergeStatic(); freezeStatic(); buildDevices(); buildActors();
+  home.player.x = player.x; home.player.z = player.z; home.player.room = 'corridor';
+  ui.site = true; initUI(); home.log.length = 0;
+  console.info(`Apartment built: ${stat.before} static meshes merged into ${stat.after}`);
+}
+// Graphics are prepared the first time the simulation is entered, so the website itself stays light.
+function initGraphics() {
+  const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
+  setupComposer(); applyQuality(ui.quality); updateSky(home.time);
+  updatePool(camera.position, home.player.room);
+  try { renderer.compile(scene, camera); } catch (e) { /* shaders compile lazily instead */ }
+  gfx = true;
+}
+async function enterSim() {
+  if (started) return;
+  document.documentElement.classList.add('in-sim'); document.getElementById('sim').classList.remove('hidden'); document.getElementById('hud').classList.remove('hidden');
+  ui.site = false; ui.dockPlan?.(false);
+  if (!gfx) { document.getElementById('sim-loading').classList.remove('hidden'); await new Promise(r => setTimeout(r, 30)); initGraphics(); document.getElementById('sim-loading').classList.add('hidden'); }
+  audio.init(); resize(); initUI();
+  started = true; clock.last = performance.now(); fAcc = fN = 0; lock(); raf = requestAnimationFrame(loop);
+  if (!welcomed) { welcomed = true; setTimeout(() => notify('Welcome to apartment A·1204', 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600); }
+}
+function exitSim() {
+  if (!started) return;
+  if (photoOn) photo(); started = false; cancelAnimationFrame(raf); keys.clear(); closeOverlay(false); document.exitPointerLock?.();
+  audio.setMusic(0, false); audio.siren(false);
+  document.documentElement.classList.remove('in-sim'); document.getElementById('sim').classList.add('hidden');
+  ui.site = true; ui.dockPlan?.(true);
+}
+ui.enterSim = enterSim; ui.exitSim = exitSim;
+document.getElementById('exit-sim').addEventListener('click', exitSim);
+
+// While only the website is showing, the home keeps living at a slow tick so the 2D diagram is real.
+let siteT = 0;
+setInterval(() => {
+  if (started || document.hidden || !ui.site) return;
+  siteT += 0.2; tickSim(0.2, actors); updateActors(0.2, 0, false, siteT); for (const u of updaters) u(0.2, siteT);
+  refreshPlanMap();
+}, 200);
+
 
 // handy for demos and automated tests
-window.SIM = { toggle, home, set, dev, player, runScene, arm, bus, ui, camera, renderer, scene, photo, get pt() { return pt; } };
+window.SIM = { stats: () => { renderer.info.autoReset = false; renderer.info.reset(); render(); const r = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length }; renderer.info.autoReset = true; return r; }, toggle, home, set, dev, player, runScene, arm, bus, ui, camera, renderer, scene, photo, enterSim, exitSim, get pt() { return pt; }, get started() { return started; } };
+if (window.DH) Object.assign(window.DH, { enter: enterSim, exit: exitSim, applyQuality: q => { ui.quality = q; if (gfx) applyQuality(q); }, focusCategory, bus, home, ui });
+try { boot(); window.DH?.onReady?.(); } catch (e) { console.error(e); window.DH?.onError?.(e); }

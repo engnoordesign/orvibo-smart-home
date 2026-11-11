@@ -1,9 +1,16 @@
-# Digital Home · ORVIBO Smart Living Simulator
+# Digital Home · ORVIBO Smart Home — website, live diagram and 3D simulator
 
-A first-person, video-game-style web simulator of an apartment fully equipped with ORVIBO smart home
-products, built for **Digital Home**, exclusive ORVIBO distributor. The visitor walks up to the door,
-unlocks it with the smart lock and then controls the whole apartment by hand, from the MixPad wall
-panels or from a phone app laid out like the ORVIBO Home app.
+A web app built for **Digital Home**, exclusive ORVIBO distributor. One page does three jobs:
+
+1. **Product website** — the benefits of a smart home and a catalogue of every ORVIBO item with its
+   advantages, models and specifications.
+2. **Live 2D diagram** — the plan of the demo apartment with every device as an icon. Click to
+   control anything, or customise which items are installed for a customer's order.
+3. **3D simulation** — "Enter simulation" opens a first-person walk-through of the same apartment,
+   in the same state you left the diagram in.
+
+An **admin panel** edits the whole main page: texts, colours, sections and their order, benefits,
+products, models, specifications, contact details and the simulator defaults.
 
 No build step and no server code: it is a static site (HTML + ES modules + three.js, all vendored).
 
@@ -18,7 +25,28 @@ python3 -m http.server 8080
 Then open `http://localhost:8080`. To publish it, enable **GitHub Pages** for the repository
 (Settings → Pages → deploy from the `main` branch, root folder).
 
-## Controls
+## Admin panel
+
+Open it with the **Admin** link in the footer, or add `#admin` to the address. Default PIN: `1234`
+(change it under Data).
+
+| Tab | What it edits |
+| --- | --- |
+| General | Company name, tagline, accent colour, hero texts and buttons, contact details |
+| Sections | Which sections appear on the main page, their titles and order |
+| Benefits | The "why a smart home" cards |
+| Products | Every product: description, advantages, specifications, models; add your own products |
+| Simulator | Default graphics level, guided tour, time of day, season; link to the equipment editor |
+| Data | Download / import the configuration, reset, change the PIN |
+
+Edits are saved in the browser at once. To publish them for every visitor, use
+**Data → Download site-config.json** and put that file next to `index.html` (replace the placeholder
+in this repository). The file also carries the installed-equipment list from the diagram.
+
+The PIN keeps casual visitors out of the panel; it is not real security, because this is a static
+site with no server behind it.
+
+## Controls (inside the simulation)
 
 | Key | Action |
 | --- | --- |
@@ -85,20 +113,26 @@ fire / gas / leak protection and the emergency button. Custom IF → THEN rules 
 Security simulations (app → Security): balcony break-in, forced entry door, PIN guessing at the lock,
 visitor at the doorbell, smoke, gas leak, water leak and SOS.
 
-## Graphics
+## Speed and stability
 
-- Physically based materials, soft shadows, ambient occlusion, bloom, bounced light and real mirrors
-- **Ultra 4K** quality renders at least 3840 pixels wide internally
-- **Ray-traced photo mode (P)** — a progressive GPU path tracer renders the current view with global
-  illumination; real-time hardware ray tracing is not available to web browsers, so this mode is for stills
-- Low / Balanced (default) / High adapt the render resolution automatically to keep the frame rate smooth;
-  the live frame rate is shown in the status box
+- The website loads without any 3D; graphics start only when the simulation is entered
+- A fixed pool of real lights is shared among the ~35 light sources, so the drawing cost stays low and
+  constant wherever you stand
+- Static geometry is merged (about 350 meshes become about 60), cutting draw calls several-fold
+- Low / Balanced / High adapt the render resolution to hold the frame rate; **Low** is the fastest
+- The simulator recovers by itself if the browser resets the graphics context, and one bad frame can
+  no longer freeze it
+- Also available: ambient occlusion, bounced light and real mirrors (High), **Ultra 4K**, and a
+  ray-traced photo mode (P) for stills
 
 ## Project layout
 
 | Path | Purpose |
 | --- | --- |
-| `index.html`, `css/style.css` | Page shell, HUD and app styling |
+| `index.html`, `css/style.css` | Page shell; simulator HUD and app styling |
+| `js/site.js`, `css/site.css` | Website, catalogue content and the admin panel |
+| `site-config.json` | Published configuration (placeholder until you export your own) |
+| `js/lights.js` | Light pool |
 | `js/world.js` | Architecture, furniture, materials, sky |
 | `js/devices.js` | Every device: model, state, hand interaction |
 | `js/sim.js` | Scenes, automations, security, climate, energy |
@@ -112,8 +146,9 @@ visitor at the doorbell, smoke, gas leak, water leak and SOS.
 
 ## Notes
 
-- Product names follow the ORVIBO range; model lists and descriptions in `js/catalog.js` are
-  illustrative and should be checked against the current official catalogue before customer use.
+- Product names follow the ORVIBO range. Descriptions, advantages and specifications are starting
+  content written for this demo, not taken from ORVIBO data sheets: check and correct them in the
+  admin panel before customer use.
 - The phone app follows the general layout of a smart-home app (home, rooms, device tiles, scenes,
   automation, security). It is not a copy of ORVIBO's own app artwork.
 - ORVIBO, MixPad, MixSwitch and SOPRO are trademarks of their respective owner.

@@ -1,17 +1,27 @@
-DIGITAL HOME - ORVIBO SMART LIVING SIMULATOR (offline edition)
+DIGITAL HOME - ORVIBO SMART HOME (offline edition)
 
 RUN IT NOW
   Double-click "ORVIBO Smart Home Simulator.html".
   It opens in your browser (Chrome or Edge recommended). No installation, no internet.
 
+WHAT YOU GET
+  - The product website: benefits, every ORVIBO item with models and specifications
+  - The live 2D diagram of the apartment: control everything, customise the installed items
+  - "Enter simulation": the 3D walk-through of the same apartment
+
+ADMIN PANEL
+  Click "Admin" at the bottom of the page. Default PIN: 1234.
+  Edit texts, sections, benefits, products, models, specifications and contact details.
+  Changes are saved in this browser on this computer.
+
 SET UP A DESKTOP ICON
   Windows:    double-click "Setup - Create Desktop Icon (Windows).bat"
   Mac/Linux:  double-click "Setup - Create Desktop Icon (Mac-Linux).command"
-  Afterwards start the simulator from the icon on your Desktop.
 
 Keep all files of this folder together; the desktop icon points to this folder.
 
-CONTROLS
+IN THE SIMULATION
   W A S D walk | Mouse look | E use | Q inspect / choose model | Tab phone app
-  F control centre (2D plan, add / remove items) | C cameras | P ray-traced photo
-  X disarm alarm | H help
+  F control centre | C cameras | P ray-traced photo | X disarm alarm | H help
+  Esc frees the mouse; "Exit simulation" at the top returns to the website.
+  If it feels slow, choose Graphics: Low before entering.

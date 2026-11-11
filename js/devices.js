@@ -1,7 +1,8 @@
 // Every smart device in the apartment: 3D model, live state, hand interaction and animation.
 import * as THREE from 'three';
 import { scene, B, C, M, H, interactables, colliders, updaters, dirty, canvasTex, makeWindow, rnd, hideInPhoto, nearestWall } from './world.js';
-export const bounceLights = [];
+import { emitter } from './lights.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { bus, home, set, dev, log, notify, fmtTime, clamp, ROOMS, roomAt, ofType, changed } from './state.js';
 import { CATALOG, modelOf } from './catalog.js';
 import { audio } from './audio.js';
@@ -18,7 +19,23 @@ function reg(id, type, room, name, state, extra = {}) {
 }
 let lastReg = null;
 // Wraps a builder so every 3D object it adds is remembered on the device (used to add / remove items from a project).
-const tracked = fn => (...a) => { const n = scene.children.length; lastReg = null; const d = fn(...a) || lastReg; if (d) (d.objs ??= []).push(...scene.children.slice(n)); return d; };
+const tracked = fn => (...a) => { const n = scene.children.length; lastReg = null; const d = fn(...a) || lastReg; if (d) { compact(n, d); (d.objs ??= []).push(...scene.children.slice(n)); } return d; };
+// Fewer draw calls: the static meshes a device adds (fixtures, strips, cords…) that share a material become one mesh.
+function compact(from, d) {
+  const groups = new Map();
+  for (const o of scene.children.slice(from)) {
+    if (!o.isMesh || o.userData.dyn || o.material.transparent || o.children.length || (o.userData.it && o.userData.it.dev !== d)) continue;
+    const k = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : ''); (groups.get(k) || groups.set(k, []).get(k)).push(o);
+  }
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const geo = mergeGeometries(list.map(o => { o.updateMatrixWorld(true); return o.geometry.clone().applyMatrix4(o.matrixWorld); }), false); if (!geo) continue;
+    const m = new THREE.Mesh(geo, list[0].material); m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+    const it0 = list.find(o => o.userData.it); if (it0) { m.userData.it = it0.userData.it; interactables.push(m); }
+    for (const o of list) { scene.remove(o); o.geometry.dispose(); const i = interactables.indexOf(o); if (i >= 0) interactables.splice(i, 1); }
+    scene.add(m);
+  }
+}
 function it(mesh, d, label, act) {
   mesh.userData.it = { dev: d, label, act: act || (() => bus.emit('inspect', d)) };
   interactables.push(mesh); return mesh;
@@ -42,10 +59,10 @@ function addLight(id, room, name, kind, cfg) {
   const fmat = glow(0xffffff, 0), trim = new THREE.MeshStandardMaterial({ color: 0xf2f0ea, roughness: 0.5 });
   const ls = [];
   if (kind === 'down') {
-    const p = new THREE.PointLight(0xffffff, 0, cfg.range ?? 0, 2); p.position.set(...cfg.pos);
-    if (cfg.shadow !== false) { p.castShadow = true; p.shadow.mapSize.set(512, 512); p.shadow.bias = -0.006; p.shadow.camera.near = 0.15; p.shadow.camera.far = 9; p.shadow.autoUpdate = false; p.shadow.needsUpdate = true; d.shadowLight = p; }
-    scene.add(p); ls.push([p, cfg.I ?? 15]);
-    if (cfg.shadow !== false) { const b = new THREE.PointLight(0xffffff, 0, cfg.bounce ?? 2.9, 1.2); b.position.set(cfg.pos[0], 0.45, cfg.pos[2]); scene.add(b); ls.push([b, (cfg.I ?? 15) * 0.085, true]); bounceLights.push(b); }
+    const I = cfg.I ?? 15, main = cfg.shadow !== false;
+    ls.push([emitter({ shadow: main, position: new THREE.Vector3(...cfg.pos), distance: cfg.range ?? 0, room, max: I }), I]);
+    if (main) ls.push([emitter({ bounce: true, position: new THREE.Vector3(cfg.pos[0], 0.45, cfg.pos[2]), distance: cfg.bounce ?? 2.9, decay: 1.2, room, max: I * 0.085 }), I * 0.085, true]);
+    d.qty = cfg.fix.length;
     for (const [x, z, y] of cfg.fix) {
       it(C(0.07, 0.014, trim, x, (y ?? H) - 0.005, z, { cast: false }), d, () => `${name} — ${d.state.on ? d.state.bri + ' %' : 'off'}`, () => { set(id, { on: !d.state.on, fade: 0.8 }, 'hand'); audio.sfx('tap'); });
       C(0.048, 0.006, fmat, x, (y ?? H) - 0.014, z, { cast: false });
@@ -53,8 +70,7 @@ function addLight(id, room, name, kind, cfg) {
   } else if (kind === 'spot') {
     for (const sp of cfg.spots) {
       const from = new THREE.Vector3(...sp.from), to = new THREE.Vector3(...sp.to), dist = from.distanceTo(to);
-      const s = new THREE.SpotLight(0xffffff, 0, dist * 1.9, sp.angle ?? 0.5, 0.65, 2); s.position.copy(from); s.target.position.copy(to); scene.add(s, s.target);
-      ls.push([s, cfg.I ?? 60]);
+      ls.push([emitter({ type: 'spot', position: from, target: to, distance: dist * 1.9, angle: sp.angle ?? 0.5, room, max: cfg.I ?? 60 }), cfg.I ?? 60]); d.qty = cfg.spots.length;
       const g = new THREE.Group(); g.position.copy(from); g.lookAt(to); scene.add(g);
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.13, 16), trim); body.rotation.x = Math.PI / 2; g.add(body);
       const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.01, 16), fmat); lens.rotation.x = Math.PI / 2; lens.position.z = 0.066; g.add(lens);
@@ -64,7 +80,7 @@ function addLight(id, room, name, kind, cfg) {
     }
     if (cfg.track) { const [x0, z0, x1, z1] = cfg.track; B(Math.abs(x1 - x0) + 0.03, 0.025, Math.abs(z1 - z0) + 0.03, M.black, (x0 + x1) / 2, H - 0.013, (z0 + z1) / 2, { cast: false }); }
   } else {
-    const p = new THREE.PointLight(0xffffff, 0, cfg.range ?? 3.4, 1.6); p.position.set(...cfg.pos); scene.add(p); ls.push([p, cfg.I ?? 4.5]);
+    ls.push([emitter({ position: new THREE.Vector3(...cfg.pos), distance: cfg.range ?? 3.4, decay: 1.6, room, max: cfg.I ?? 4.5 }), cfg.I ?? 4.5]);
     for (const [x0, z0, x1, z1, y] of cfg.segs) it(B(Math.abs(x1 - x0) + 0.025, 0.02, Math.abs(z1 - z0) + 0.025, fmat, (x0 + x1) / 2, y ?? 2.74, (z0 + z1) / 2, { cast: false }), d, () => `${name} — ${d.state.on ? d.state.bri + ' %' : 'off'}`);
   }
   d.cur = 0; d.col = kelvin(d.state.cct); d.power = 0; const phase = rnd();
@@ -149,7 +165,7 @@ function addCurtain(id, room, name, axis, at, a, b, y0, y1) {
   for (const side of [0, 1]) {
     const geo = axis === 'x' ? new THREE.BoxGeometry(half, hh, 0.05) : new THREE.BoxGeometry(0.05, hh, half);
     const off = (side ? -1 : 1) * half / 2; if (axis === 'x') geo.translate(off, 0, 0); else geo.translate(0, 0, off);
-    const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true;
+    const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; m.userData.dyn = true;
     const e = side ? b : a; m.position.set(axis === 'x' ? e : at, (y0 + y1) / 2, axis === 'x' ? at : e); scene.add(m); panels.push(m);
     it(m, d, () => `Curtain — ${d.state.pos > 50 ? 'open' : 'close'} (${d.state.pos} % closed)`, () => { set(id, { pos: d.state.pos > 50 ? 0 : 100 }, 'hand'); used(d); });
   }
@@ -338,7 +354,7 @@ function addTV(id, room, name, pos, facing, w) {
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.MeshBasicMaterial({ color: 0x050505, toneMapped: false });
   const scr = new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), mat); scr.position.z = 0.031; g.add(scr);
-  const p = new THREE.PointLight(0x88aaff, 0, 4.5, 2); p.position.set(0, 0, 0.6); g.add(p);
+  g.updateMatrixWorld(true); const p = emitter({ position: new THREE.Vector3(0, 0, 0.6).applyMatrix4(g.matrixWorld), distance: 4.5, room, max: 2 });
   const act = () => { set(id, { on: !d.state.on }, 'hand'); audio.sfx('ir'); used(d); };
   it(scr, d, () => `${name} — ${d.state.on ? CH[d.state.ch] + ' (turn off)' : 'turn on'}`, act); it(body, d, () => name, act);
   let acc = 0, was = false;
@@ -435,7 +451,7 @@ export function buildDevices() {
   addLight('l_bath_mirror', 'bath', 'Mirror light', 'strip', { pos: [8.7, 1.7, 1.6], I: 2.6, range: 2.6, watts: 12, cct: 4500, segs: [[8.11, 0.98, 8.11, 2.22, 2.02], [8.11, 0.98, 8.11, 2.22, 1.08]] });
 
   // building corridor light (not a smart device — always on)
-  const cl = new THREE.PointLight(0xffe2bd, 9, 7, 2); cl.position.set(6, 2.5, 10.3); scene.add(cl);
+  emitter({ position: new THREE.Vector3(6, 2.5, 10.3), distance: 7, room: 'corridor', intensity: 9, max: 9, color: new THREE.Color(0xffe2bd) });
   for (const x of [4.6, 7.4]) C(0.09, 0.012, glow(0xffe2bd, 5), x, H - 0.006, 10.3, { cast: false });
 
   // MixPad panels & MixSwitches

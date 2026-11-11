@@ -151,19 +151,20 @@ function customSide() {
 
 let lastSide = '';
 export function renderPlan(mapOnly) {
-  if (ui.open !== 'plan') return;
+  if (ui.open !== 'plan' && !ui.site) return;
   $('#plan-map').innerHTML = mapSVG();
   if (mapOnly) return;
   $('#plan-top').innerHTML = `<div class="brand">CONTROL CENTRE</div><span class="mut">${fmtTime()}${project.customer ? ' · ' + project.customer : ''}</span>${secChip()}
     <div class="seg">${[['disarmed', 'Disarm'], ['home', 'Arm Home'], ['away', 'Arm Away']].map(([v, l]) => `<button class="${home.security.mode === v ? 'on' : ''}" data-a="arm" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="hscroll">${Object.entries(SCENES).map(([k, x]) => `<button class="pill" data-a="scene" data-v="${k}"><span>${x.icon}</span>${x.name}</button>`).join('')}</div>
-    <button class="btn pri" data-a="close">Back to apartment (F)</button>`;
+    ${ui.site ? '<button class="btn pri" data-a="enter">Enter simulation ▸</button>' : '<button class="btn pri" data-a="close">Back to apartment (F)</button>'}`;
   const side = `<div class="seg ptabs">${[['control', 'Control'], ['custom', 'Customise project']].map(([v, l]) => `<button class="${P.tab === v ? 'on' : ''}" data-a="ptab" data-v="${v}">${l}</button>`).join('')}</div>` + (P.tab === 'custom' ? customSide() : controlSide());
   if (side !== lastSide) { $('#plan-side').innerHTML = side; lastSide = side; }
 }
 
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
 
+export function focusCategory(cat) { const d = everything().find(x => x.cat === cat && x.installed !== false); P.tab = 'control'; P.room = null; P.sel = d ? d.id : null; changed(); return !!d; }
 export function initPlan() {
   Object.assign(A, {
     plan: v => { if (v) P.tab = v; ui.openPlan(); },
@@ -199,9 +200,9 @@ export function initPlan() {
       const d = dev(id), r = ROOMS[INDOOR.includes(d.room) ? d.room : 'living'].rect, cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2;
       let dx = cx - d.pos.x, dz = cz - d.pos.z; const l = Math.hypot(dx, dz) || 1, k = Math.min(1.4, l); dx = dx / l * k; dz = dz / l * k;
       const x = Math.max(r[0] + 0.5, Math.min(r[2] - 0.5, d.pos.x + dx)), z = Math.max(r[1] + 0.5, Math.min(r[3] - 0.5, d.pos.z + dz));
-      const hx = d.pos.x - x, hz = d.pos.z - z; closeOverlay(); bus.emit('teleport', { x, z, yaw: Math.atan2(-hx, -hz), pitch: Math.atan2(d.pos.y - 1.66, Math.hypot(hx, hz) || 1) });
+      const hx = d.pos.x - x, hz = d.pos.z - z; closeOverlay(); if (ui.site) ui.enterSim(); bus.emit('teleport', { x, z, yaw: Math.atan2(-hx, -hz), pitch: Math.atan2(d.pos.y - 1.66, Math.hypot(hx, hz) || 1) });
     },
-    pgoroom: v => { const r = ROOMS[v].rect; closeOverlay(); bus.emit('teleport', { x: (r[0] + r[2]) / 2, z: (r[1] + r[3]) / 2 + 0.6 }); },
+    pgoroom: v => { const r = ROOMS[v].rect; closeOverlay(); if (ui.site) ui.enterSim(); bus.emit('teleport', { x: (r[0] + r[2]) / 2, z: (r[1] + r[3]) / 2 + 0.6 }); },
     pexp: v => {
       const list = bom(), name = (project.customer || 'orvibo-project').replace(/[^\w\-]+/g, '_');
       const txt = `Digital Home — ORVIBO project${project.customer ? ' — ' + project.customer : ''}\n` + list.map(x => `${x.q} × ${x.name}`).join('\n');

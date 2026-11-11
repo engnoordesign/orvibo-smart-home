@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { clamp } from './state.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const scene = new THREE.Scene();
 export const colliders = [], occluders = [], interactables = [], updaters = [];
@@ -185,6 +186,27 @@ export function nearestWall(x, z) {
     best = { d, x: horiz ? nx + Math.sign(dx) * 0.006 : clamp(x, c.x0 + 0.1, c.x1 - 0.1), z: horiz ? clamp(z, c.z0 + 0.1, c.z1 - 0.1) : nz + Math.sign(dz) * 0.006, facing: horiz ? (dx > 0 ? 'e' : 'w') : (dz > 0 ? 's' : 'n') };
   }
   return best;
+}
+// Merge all static, opaque meshes that share a material into one mesh each: hundreds of draw calls become a few dozen.
+export function mergeStatic() {
+  scene.updateMatrixWorld(true);
+  const groups = new Map(); let before = 0;
+  scene.traverse(o => {
+    if (!o.isMesh) return; before++;
+    if (o.isReflector || o.userData.dyn || Array.isArray(o.material) || o.material.transparent || o.children.length) return;
+    const k = o.material.uuid + (o.castShadow ? 'c' : '') + (o.receiveShadow ? 'r' : ''); (groups.get(k) || groups.set(k, []).get(k)).push(o);
+  });
+  let after = before;
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const geo = mergeGeometries(list.map(o => o.geometry.clone().applyMatrix4(o.matrixWorld)), false); if (!geo) continue;
+    const m = new THREE.Mesh(geo, list[0].material); m.castShadow = list[0].castShadow; m.receiveShadow = list[0].receiveShadow;
+    for (const o of list) { o.parent.remove(o); o.geometry.dispose(); }
+    scene.add(m); after -= list.length - 1;
+  }
+  // everything solid now blocks the "use" ray, not only the walls
+  occluders.length = 0; scene.traverse(o => { if (o.isMesh && !o.isReflector && !o.material.transparent) occluders.push(o); });
+  return { before, after };
 }
 // Static geometry never moves: freezing its matrices saves per-frame work.
 export function freezeStatic() {

@@ -17,7 +17,7 @@ function show(kind) {
   ui.open = kind; document.exitPointerLock?.();
   deviceEl.classList.toggle('hidden', !(kind === 'phone' || kind === 'mixpad')); deviceEl.className = (kind === 'phone' || kind === 'mixpad') ? kind : 'hidden';
   $('#lockui').classList.toggle('hidden', kind !== 'lock'); $('#inspect').classList.toggle('hidden', kind !== 'inspect');
-  $('#cctv').classList.toggle('hidden', kind !== 'cctv'); $('#help').classList.toggle('hidden', kind !== 'help'); $('#plan').classList.toggle('hidden', kind !== 'plan');
+  $('#cctv').classList.toggle('hidden', kind !== 'cctv'); $('#help').classList.toggle('hidden', kind !== 'help'); $('#plan').classList.toggle('hidden', kind !== 'plan' && !ui.site);
   document.body.classList.toggle('phone-open', kind === 'phone');
   $('#device-close').textContent = kind === 'mixpad' ? 'Leave MixPad (Esc)' : 'Close (Tab)';
 }
@@ -86,7 +86,8 @@ export function paintFeeds(id, source, sx, sy, sw, sh) {
   for (const el of document.querySelectorAll('canvas.feed')) {
     const cid = el.dataset.cam; if (id && cid !== id) continue; const g = el.getContext('2d'), d = dev(cid);
     if (!d || d.installed === false || !d.state.on) { g.fillStyle = '#0c0f14'; g.fillRect(0, 0, 320, 180); g.fillStyle = '#7d8796'; g.font = '14px system-ui'; g.textAlign = 'center'; g.fillText('Privacy mode — camera off', 160, 94); }
-    else if (feedCache[cid]) g.drawImage(feedCache[cid], 0, 0);
+    else if (feedCache[cid] && !ui.site) g.drawImage(feedCache[cid], 0, 0);
+    else { g.fillStyle = '#0c0f14'; g.fillRect(0, 0, 320, 180); g.fillStyle = '#7d8796'; g.font = '14px system-ui'; g.textAlign = 'center'; g.fillText(ui.site ? 'Live video plays inside the simulation' : 'Connecting…', 160, 94); }
   }
 }
 const line = (d, right) => `<div class="card"><div class="row"><div class="g"><b>${d.name}</b><small>${modelOf(d)?.name || ''}</small></div>${right}</div></div>`;
@@ -182,7 +183,7 @@ const TABDEF = [['home', '🏠', 'Home'], ['smart', '✨', 'Smart'], ['security'
 
 function render() {
   const ae = document.activeElement; if (hold || (ae && (app.contains(ae) || $('#plan').contains(ae)) && (ae.tagName === 'SELECT' || ae.type === 'text'))) return;
-  if (ui.open === 'plan') { renderPlan(); paintFeeds(); return; }
+  if (ui.open === 'plan' || (ui.site && !ui.open)) { renderPlan(); paintFeeds(); return; }
   if (ui.open !== 'phone' && ui.open !== 'mixpad') return;
   if (!TABDEF.some(t => t[0] === ui.tab)) ui.tab = 'home';
   app.innerHTML = ui.page ? page() : TABS[ui.tab]();
@@ -202,7 +203,8 @@ export const A = {
   arm: v => arm(v, ui.open === 'mixpad' ? 'MixPad' : 'app'),
   lock: v => { const l = dev('lock'); if (v === 'unlock') { if (l.state.locked) unlockAttempt('app', true, 'Owner, remote'); } else set('lock', { open: false, locked: true }, 'app'); },
   temppin: () => { home.tempPin = String(100000 + Math.floor(Math.random() * 899999)); notify('One-time PIN created', home.tempPin, 'ok'); },
-  cctv: () => openCCTV(),
+  cctv: () => { if (ui.site) ui.enterSim().then(openCCTV); else openCCTV(); },
+  enter: () => ui.enterSim(),
   tvcam: v => { const tv = dev('tv_liv'), showing = tv && tv.state.on && tv.state.ch === 4 && (home.tvCam || '') === (v || ''); if (tvCameras(!showing, v || null)) notify(showing ? 'TV back to normal' : 'Cameras on the living-room TV', showing ? '' : v ? dev(v).name : 'Camera wall', 'ok'); },
   sim: v => { closeOverlay(); ({ breakin: breakIn, armbreak: () => { if (home.security.mode === 'disarmed') arm('home', 'app'); breakIn(); }, forced: forcedDoor, tamper: lockTamper, visitor: visitorRings, smoke: () => triggerHazard('smoke'), gas: () => triggerHazard('gas'), leak: () => triggerHazard('leak'), sos: () => { const b = ofType('sos')[0]; b ? pressSOS(b.id) : notify('No emergency button installed', 'Add one in the Control Centre.', 'warn'); } })[v](); },
   auto: v => { AUTOS[v].on = !AUTOS[v].on; }, addrule: () => addCustomRule(rule.trig, rule.scene),
@@ -363,7 +365,7 @@ export function updateHUD(dt, target, yaw, actors) {
     if (s.alarm) { al.classList.remove('hidden'); al.innerHTML = `<b>⚠ ${s.alarm.title}</b><small>${s.alarm.where}</small><button data-a="arm" data-v="disarmed">Disarm (X)</button>`; } else al.classList.add('hidden');
     if (ui.pip && !s.alarm && (ui.pipUntil ? performance.now() > ui.pipUntil : !home.doorbell)) ui.pip = null;
     if (ui.pip && !has(ui.pip)) ui.pip = null;
-    const pip = $('#pip'), showPip = ui.pip && (!ui.open || ui.open === 'phone'); pip.classList.toggle('hidden', !showPip); $('#hud').classList.toggle('haspip', !!showPip);
+    const pip = $('#pip'), showPip = ui.pip && (!ui.open || ui.open === 'phone'); pip.classList.toggle('hidden', !showPip); document.body.classList.toggle('haspip', !!showPip);
     if (showPip) {
       $('#pip-label').innerHTML = `${dev(ui.pip).name.toUpperCase()} <span style="color:var(--bad)">● ${s.alarm ? 'REC' : 'LIVE'}</span>`;
       const b = s.alarm ? '<button class="pri" data-a="arm" data-v="disarmed">Disarm</button><button data-a="cctv">All cameras</button>' : home.doorbell ? '<button class="pri" data-a="pipunlock">Unlock door</button><button data-a="pipx">Dismiss</button>' : '<button class="pri" data-a="cctv">All cameras</button><button data-a="pipx">Dismiss</button>';
@@ -389,4 +391,11 @@ function drawMap(yaw, actors) {
   const p = home.player; mc.save(); mc.translate(X(p.x), Z(p.z)); mc.rotate(-yaw); mc.fillStyle = '#fff'; mc.beginPath(); mc.moveTo(0, -8); mc.lineTo(5.5, 6); mc.lineTo(0, 3); mc.lineTo(-5.5, 6); mc.fill(); mc.restore();
 }
 
-export function initUI() { if (!initUI.done) { initUI.done = true; initPlan(); loadSavedProject(); } renderQuests(); ui.tour = $('#opt-tour').checked; renderQuests(); }
+// The Control Centre lives inside the website page (embedded) or floats over the 3D view.
+ui.dockPlan = embed => {
+  const el = $('#plan'), slot = $('#plan-slot');
+  if (embed && slot) { slot.appendChild(el); el.classList.add('embedded'); el.classList.remove('hidden'); render(); }
+  else { document.body.appendChild(el); el.classList.remove('embedded'); el.classList.add('hidden'); }
+};
+export function refreshPlanMap() { if (ui.site && !hold && $('#plan-slot')) renderPlan(true); }
+export function initUI() { if (!initUI.done) { initUI.done = true; initPlan(); loadSavedProject(); } renderQuests(); }

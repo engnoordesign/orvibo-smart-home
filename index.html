@@ -2,61 +2,53 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Digital Home · ORVIBO Smart Living Simulator</title>
-<meta name="description" content="Walk through a fully equipped ORVIBO smart apartment in first person and control everything by hand, by MixPad or from the app.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Home · ORVIBO Smart Home</title>
+<meta name="description" content="Digital Home — exclusive ORVIBO distributor. Explore the products, see every device on a live plan of a smart apartment and walk through it in a 3D simulation.">
 <link rel="icon" href="favicon.png">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/site.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/", "three/examples/jsm/": "./vendor/addons/", "three-mesh-bvh": "./vendor/three-mesh-bvh.module.js", "three-gpu-pathtracer": "./vendor/three-gpu-pathtracer.module.js" } }
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<!-- ============ website (rendered by js/site.js from the editable configuration) ============ -->
+<div id="site"></div>
+<div id="admin" class="hidden"></div>
 
-<div id="hud" class="hidden">
-  <div id="status"></div>
-  <div id="crosshair"></div>
-  <div id="prompt"></div>
-  <div id="quests"></div>
-  <canvas id="minimap" width="250" height="215"></canvas>
-  <div id="keys"><b>WASD</b> move · <b>Shift</b> run · <b>E</b> use · <b>Q</b> inspect / choose model · <b>Tab</b> phone app · <b>F</b> control centre · <b>C</b> cameras · <b>P</b> ray-traced photo · <b>X</b> disarm · <b>H</b> help</div>
-  <div id="alarm" class="hidden"></div>
-  <div id="pip" class="hidden"><div id="pip-label"></div><div id="pip-btns"></div></div>
-  <div id="toasts"></div>
-  <div id="touch">
-    <div id="stick"><div id="knob"></div></div>
-    <button data-t="use">USE</button><button data-t="info">INFO</button><button data-t="app">APP</button><button data-t="cam">CAM</button><button data-t="map">MAP</button>
-  </div>
-</div>
+<!-- ============ live 2D diagram / Control Centre (shared by the website and the simulator) ============ -->
+<div id="plan" class="hidden"><div id="plan-top"></div><div id="plan-main"><div id="plan-map"><div class="plan-wait">Preparing the apartment…</div></div><div id="plan-side"></div></div></div>
 
-<div id="cctv" class="hidden">
-  <div id="cctv-bar"><span>● LIVE · ORVIBO Smart Cameras</span><button id="cctv-close">Close (C)</button></div>
-</div>
-
-<div id="plan" class="hidden"><div id="plan-top"></div><div id="plan-main"><div id="plan-map"></div><div id="plan-side"></div></div></div>
-
-<div id="device" class="hidden"><div id="frame"><div id="notch"></div><div id="app"></div><div id="tabs"></div></div><button id="device-close">Close (Tab)</button></div>
-<div id="lockui" class="hidden"></div>
-<div id="inspect" class="hidden"></div>
-
-<div id="start">
-  <div class="start-card">
-    <div class="brand">DIGITAL HOME</div>
-    <div class="sub">Exclusive distributor of <b>ORVIBO</b> smart home</div>
-    <h1>Smart Living Simulator</h1>
-    <p>Step into apartment A·1204. Unlock the door with your fingerprint, then control lighting, climate, curtains, music, TV and security by hand, from the MixPad or from the app — and see how the home reacts on its own.</p>
-    <div class="grid">
-      <div><b>W A S D</b><span>walk</span></div><div><b>Mouse</b><span>look</span></div><div><b>E / click</b><span>use device</span></div>
-      <div><b>Q</b><span>inspect &amp; pick model</span></div><div><b>Tab</b><span>phone app</span></div><div><b>F</b><span>control centre (2D)</span></div><div><b>C</b><span>security cameras</span></div><div><b>P</b><span>ray-traced photo</span></div><div><b>X</b><span>disarm alarm</span></div>
+<!-- ============ 3D simulator ============ -->
+<div id="sim" class="hidden">
+  <canvas id="c"></canvas>
+  <div id="sim-loading" class="hidden"><div><b>Preparing the 3D apartment…</b><span>This takes a few seconds the first time.</span></div></div>
+  <div id="hud" class="hidden">
+    <div id="status"></div>
+    <button id="exit-sim" title="Back to the website">⌂ Exit simulation</button>
+    <div id="crosshair"></div>
+    <div id="prompt"></div>
+    <div id="quests"></div>
+    <canvas id="minimap" width="250" height="215"></canvas>
+    <div id="keys"><b>WASD</b> move · <b>Shift</b> run · <b>E</b> use · <b>Q</b> inspect / choose model · <b>Tab</b> phone app · <b>F</b> control centre · <b>C</b> cameras · <b>P</b> ray-traced photo · <b>X</b> disarm · <b>H</b> help · <b>Esc</b> free the mouse</div>
+    <div id="alarm" class="hidden"></div>
+    <div id="pip" class="hidden"><div id="pip-label"></div><div id="pip-btns"></div></div>
+    <div id="touch">
+      <div id="stick"><div id="knob"></div></div>
+      <button data-t="use">USE</button><button data-t="info">INFO</button><button data-t="app">APP</button><button data-t="cam">CAM</button><button data-t="map">MAP</button>
     </div>
-    <button id="enter" disabled>Loading…</button>
-    <label class="chk"><input type="checkbox" id="opt-tour" checked> Guided tour (objectives)</label>
-    <div class="fine">Runs entirely in your browser. Best on a desktop with a mouse; touch controls are available on tablets.</div>
   </div>
+  <div id="cctv" class="hidden">
+    <div id="cctv-bar"><span>● LIVE · ORVIBO Smart Cameras</span><button id="cctv-close">Close (C)</button></div>
+  </div>
+  <div id="device" class="hidden"><div id="frame"><div id="notch"></div><div id="app"></div><div id="tabs"></div></div><button id="device-close">Close (Tab)</button></div>
+  <div id="lockui" class="hidden"></div>
+  <div id="inspect" class="hidden"></div>
+  <div id="help" class="hidden"></div>
+  <div id="photo" class="hidden"><b>RAY-TRACED PHOTO MODE</b><span id="photo-s">Preparing…</span><small>Path tracing with global illumination, soft shadows and true reflections. The image refines the longer you wait. Press P or Esc to return.</small></div>
 </div>
-<div id="help" class="hidden"></div>
-<div id="photo" class="hidden"><b>RAY-TRACED PHOTO MODE</b><span id="photo-s">Preparing…</span><small>Path tracing with global illumination, soft shadows and true reflections. The image refines the longer you wait. Press P or Esc to return.</small></div>
-<script type="module" src="js/main.js"></script>
+<div id="toasts"></div>
+<script type="module" src="js/site.js"></script>
 </body>
 </html>
