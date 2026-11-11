@@ -25,6 +25,21 @@ python3 -m http.server 8080
 Then open `http://localhost:8080`. To publish it, enable **GitHub Pages** for the repository
 (Settings → Pages → deploy from the `main` branch, root folder).
 
+## Publish on Cloudflare Workers
+
+The repository includes `wrangler.jsonc`, so it deploys as a static-assets Worker with no changes.
+
+- **From the dashboard (recommended):** Cloudflare → Workers & Pages → Create → Import a repository →
+  choose this repository → Deploy. Every later push to `main` is published automatically.
+- **From a computer with Node.js:**
+
+```bash
+npx wrangler deploy
+```
+
+The build step in `wrangler.jsonc` copies only the website files into `dist/` and publishes that
+folder; the README, tools and Git data are not uploaded.
+
 ## Admin panel
 
 Open it with the **Admin** link in the footer, or add `#admin` to the address. Default PIN: `1234`

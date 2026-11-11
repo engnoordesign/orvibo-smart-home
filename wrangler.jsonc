@@ -1,0 +1,8 @@
+// Cloudflare Workers configuration: the whole site is served as static assets (no server code).
+// The build step copies only the public website files into dist/, which is what gets published.
+{
+  "name": "orvibo-smart-home",
+  "compatibility_date": "2026-01-01",
+  "build": { "command": "rm -rf dist && mkdir dist && cp -r index.html favicon.png site-config.json css js vendor standalone dist/" },
+  "assets": { "directory": "./dist" }
+}
