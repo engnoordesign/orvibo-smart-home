@@ -80,11 +80,9 @@ export const AUTOS = [
   { id: 'sos', name: 'Emergency button', when: 'SOS button is pressed', then: 'Alert the family, lights on, unlock for responders, cameras record', on: true, locked: true },
 ];
 const auto = id => AUTOS.find(a => a.id === id)?.on;
-export const TRIGGERS = {
-  unlock: 'Door is unlocked', door_open: 'Entry door opens', win_open: 'Any window opens',
-  'pres:living': 'Presence in Living Room', 'pres:kitchen': 'Presence in Kitchen', 'pres:bedroom': 'Presence in Guest Bedroom', 'pres:master': 'Presence in Master Bedroom', 'pres:bath': 'Presence in Bathroom',
-  tv_on: 'Living-room TV turns on', 'time:7': 'Clock reaches 07:00', 'time:22': 'Clock reaches 22:00', doorbell: 'Doorbell rings',
-};
+export const TRIGGERS = { unlock: 'Door is unlocked', door_open: 'Entry door opens', win_open: 'Any window opens', tv_on: 'Living-room TV turns on', 'time:7': 'Clock reaches 07:00', 'time:22': 'Clock reaches 22:00', doorbell: 'Doorbell rings' };
+export function syncTriggers() { for (const k in TRIGGERS) if (k.startsWith('pres:')) delete TRIGGERS[k]; for (const r of INDOOR) TRIGGERS['pres:' + r] = `Presence in ${ROOMS[r].name}`; }
+syncTriggers();
 export function addCustomRule(trig, scene) {
   AUTOS.push({ id: 'c' + Date.now(), name: `${TRIGGERS[trig]} → ${SCENES[scene].name}`, when: TRIGGERS[trig], then: `Run scene “${SCENES[scene].name}”`, on: true, custom: true, trig, scene });
   log('New automation created'); changed();
@@ -184,7 +182,6 @@ bus.on('device', ({ id, d, patch, prev, src }) => {
 });
 
 // ---------- per-frame simulation ----------
-const SENSED = [...INDOOR, 'balcony'];
 const lastSeen = {}; let acc1 = 0, doorOpenT = 0, lastHour = home.time;
 export function tickSim(dt, actors = []) {
   const s = home.security, prevT = home.time;
@@ -205,7 +202,8 @@ export function tickSim(dt, actors = []) {
   // presence
   const now = performance.now() / 1000, here = {};
   here[home.player.room] = true; actors.forEach(a => { if (a.active) here[roomAt(a.x, a.z)] = true; });
-  for (const r of SENSED) {
+  for (const r in ROOMS) {
+    if (r === 'corridor') continue;
     // a room is only "seen" if a presence / motion sensor is actually installed there
     const sensors = ofType('presence').filter(p => p.room === r), seen = !!here[r] && sensors.length > 0;
     if (seen) lastSeen[r] = now;
@@ -213,8 +211,8 @@ export function tickSim(dt, actors = []) {
     for (const p of sensors) if (p.state.present !== present) set(p.id, { present }, 'sensor');
     if (present !== !!home.occupancy[r]) {
       home.occupancy[r] = present; bus.emit('presence', { room: r, present });
-      if (r === 'balcony') {
-        if (present && s.mode !== 'disarmed' && s.exitDelay <= 0 && !s.alarm) { notify('Perimeter warning', 'Outdoor motion sensor: movement on the balcony', 'warn'); audio.say('Attention. Movement detected on the balcony.'); bus.emit('prealarm', 'cam_bal'); }
+      if (ROOMS[r].outside) {
+        if (present && s.mode !== 'disarmed' && s.exitDelay <= 0 && !s.alarm) { notify('Perimeter warning', `Outdoor motion sensor: movement on the ${ROOMS[r].name.toLowerCase()}`, 'warn'); audio.say(`Attention. Movement detected on the ${ROOMS[r].name}.`); bus.emit('prealarm', 'cam_bal'); }
         continue;
       }
       if (present) {
@@ -257,7 +255,7 @@ function slowTick(dt) {
     const c = home.climate[r], a = ofType('ac').find(x => x.room === r);
     const win = ofType('contact', true).some(w => w.room === r && w.state.open && w.id !== 'ds_entry'), sensed = ofType('climate').some(t => t.room === r);
     c.temp += (home.outdoor.temp - c.temp) * (0.004 + (win ? 0.035 : 0)) * dt;
-    if (adj[r]) c.temp += (home.climate[adj[r]].temp - c.temp) * 0.03 * dt;
+    if (adj[r] && home.climate[adj[r]]) c.temp += (home.climate[adj[r]].temp - c.temp) * 0.03 * dt;
     let humT = 47 + (win ? (home.outdoor.hum - 47) * 0.6 : 0), humR = 0.03;
     if (a) {
       a.running = a.state.on && !a.paused;
@@ -274,7 +272,7 @@ function slowTick(dt) {
       }
     }
     if (r === 'bath') {
-      const sh = dev('shower'), fan = dev('fan_bath');
+      const sh = dev('shower') || { state: {} }, fan = dev('fan_bath') || { state: {} };
       if (sh.state.on) { humT = 96; humR = 0.09; c.temp += (30 - c.temp) * 0.01 * dt; }
       if (fan.state.on) { humT = Math.min(humT, sh.state.on ? 80 : 44); humR = sh.state.on ? 0.09 : 0.12; watts += 25; }
       if (auto('humidity') && sensed && has('fan_bath')) {

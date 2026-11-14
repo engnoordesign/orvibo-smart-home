@@ -187,7 +187,8 @@ function addContact(id, room, name, pos, extra = {}) {
   return d;
 }
 function addWindow(id, room, name, win, extra) {
-  const c = win.center, d = addContact(id, room, name, win.axis === 'x' ? [c[0], c[1] + 0.55, c[2] + 0.07] : [c[0] + (c[0] < 6 ? 0.07 : -0.07), c[1] + 0.9, c[2]], { ...extra, dx: 0, dz: 0.04 });
+  const c = win.center, sg = extra?.sgn ?? (win.axis === 'x' ? 1 : (c[0] < 6 ? 1 : -1));          // which side of the wall is indoors
+  const d = addContact(id, room, name, win.axis === 'x' ? [c[0], c[1] + 0.55, c[2] + 0.07 * sg] : [c[0] + 0.07 * sg, c[1] + 0.9, c[2]], { ...extra, dx: 0, dz: 0.04 });
   d.cur = 0;
   it(win.slide, d, () => `${name} — ${d.state.open ? 'close' : 'open'}`, () => { set(id, { open: !d.state.open }, 'hand'); audio.sfx('door'); used(d); });
   updaters.push(dt => {
@@ -198,10 +199,16 @@ function addWindow(id, room, name, win, extra) {
 }
 
 // ---------------- entry door + smart lock ----------------
-function addEntry() {
-  const d = reg('lock', 'lock', 'living', 'Entry Smart Lock', { locked: true, open: false }, { pos: new THREE.Vector3(6.05, 1.05, 9) });
-  const ds = addContact('ds_entry', 'living', 'Entry door', [5.7, 2.14, 8.86], { cam: 'cam_entry', dz: 0, dx: 0.05 });
-  const pivot = new THREE.Group(); pivot.position.set(5.26, 0, 9); scene.add(pivot);
+function addEntry(o = {}) {
+  // hinge position, rotation (0 = outside towards +z) and the room the door opens into
+  const hx = o.x ?? 5.26, hz = o.z ?? 9, rot = o.rot ?? 0, room = o.room || 'living';
+  const ax = Math.round(Math.cos(rot)), az = Math.round(-Math.sin(rot)), nx = Math.round(Math.sin(rot)), nz = Math.round(Math.cos(rot));
+  const W = (lx, lz) => [hx + ax * lx + nx * lz, hz + az * lx + nz * lz];          // door-local → world
+  const [cx, cz] = W(0.44, 0), [px, pz] = W(0.79, 0), [sx, sz] = W(0.44, -0.14), outsideOf = p => (p.x - hx) * nx + (p.z - hz) * nz > 0;
+  const d = reg('lock', 'lock', room, 'Entry Smart Lock', { locked: true, open: false }, { pos: new THREE.Vector3(px, 1.05, pz), door: { hx, hz, ax, az, nx, nz } });
+  const ds = addContact('ds_entry', room, 'Entry door', [sx, 2.14, sz], { cam: 'cam_entry', dz: az * 0.05, dx: ax * 0.05 });
+  const root = new THREE.Group(); root.position.set(hx, 0, hz); root.rotation.y = rot; scene.add(root);
+  const pivot = new THREE.Group(); root.add(pivot);
   const leaf = B(0.88, 2.04, 0.05, new THREE.MeshStandardMaterial({ color: 0x3a2c22, roughness: 0.5 }), 0.44, 1.02, 0, { parent: pivot, occ: true });
   for (let i = 0; i < 3; i++) lb(pivot, 0.6, 0.012, 0.056, M.brass, 0.44, 0.5 + i * 0.5, 0);
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2b2a2c, roughness: 0.25, metalness: 0.7 }), accMat = new THREE.MeshStandardMaterial({ color: 0xc9a25a, roughness: 0.3, metalness: 0.9 });
@@ -213,14 +220,15 @@ function addEntry() {
   lb(out, 0.15, 0.022, 0.022, accMat, -0.05, -0.1, 0.045); lb(out, 0.022, 0.022, 0.04, accMat, 0.01, -0.1, 0.03);
   const inn = new THREE.Group(); inn.position.set(0.78, 1.05, -0.03); pivot.add(inn);
   lb(inn, 0.07, 0.3, 0.028, bodyMat, 0, 0.02, -0.012); lb(inn, 0.15, 0.022, 0.022, accMat, -0.05, -0.06, -0.045); lb(inn, 0.022, 0.022, 0.04, accMat, 0.01, -0.06, -0.03);
-  const col = { x0: 5.2, x1: 6.2, z0: 8.94, z1: 9.06, on: true }; colliders.push(col);
+  const [c0x, c0z] = W(-0.06, -0.06), [c1x, c1z] = W(0.94, 0.06);
+  const col = { x0: Math.min(c0x, c1x), x1: Math.max(c0x, c1x), z0: Math.min(c0z, c1z), z1: Math.max(c0z, c1z), on: true }; colliders.push(col);
   const s = d.state;
-  const label = () => { const outside = home.player.z > 9; return s.open ? 'Close door' : !s.locked ? 'Open door' : outside ? `Unlock — ${modelOf(d).name}` : 'Open door (inside handle)'; };
+  const label = () => { const outside = outsideOf(home.player); return s.open ? 'Close door' : !s.locked ? 'Open door' : outside ? `Unlock — ${modelOf(d).name}` : 'Open door (inside handle)'; };
   const act = () => {
     used(d);
     if (s.open) return set('lock', { open: false }, 'hand');
     if (!s.locked) return set('lock', { open: true }, 'hand');
-    if (home.player.z > 9) bus.emit('openLockUI'); else unlockAttempt('inside', true, 'inside handle');
+    if (outsideOf(home.player)) bus.emit('openLockUI'); else unlockAttempt('inside', true, 'inside handle');
   };
   [leaf, ob, ...inn.children].forEach(m => it(m, d, label, act));
   d.applyModel = m => { bodyMat.color.set(m.color); accMat.color.set(m.accent); ob.scale.y = m.tall; face.visible = !!m.face; };
@@ -233,7 +241,7 @@ function addEntry() {
     if (d.cur !== before) { dirty.sun = true; dirty.living = true; if (d.cur === 0) { audio.sfx('door'); s.forced = false; } }
     const isOpen = d.cur > 0.06; if (isOpen !== ds.state.open) set('ds_entry', { open: isOpen }, 'sensor');
     if (s.open && d.cur >= 1.71) {
-      openT += dt; const p = home.player, near = Math.abs(p.z - 9) < 1.4 && p.x > 4.5 && p.x < 6.9;
+      openT += dt; const p = home.player, near = Math.hypot(p.x - cx, p.z - cz) < 1.5;
       if (openT > 4 && !near && !home.security.alarm && !d.hold) set('lock', { open: false }, 'auto');
     } else openT = 0;
     if (!s.open && d.cur === 0 && !s.locked && !home.security.alarm) { lockT += dt; if (lockT > 2.5) { set('lock', { locked: true }, 'auto'); audio.sfx('motor'); log('Door auto-locked'); } } else lockT = 0;
@@ -553,6 +561,8 @@ export function addCustom(spec) {
   if (spec.model && CATALOG[d.cat]?.models.some(m => m.id === spec.model)) { d.model = spec.model; d.applyModel?.(modelOf(d)); }
   bus.emit('layout'); changed(); return d;
 }
+
+export { addLight, addSwitch, addMixPad, addCurtain, addContact, addWindow, addEntry, addPresence, addClimate, addSOS, addHazard, addRelay, addCamera, addSpeaker, addTV, addAC, cove };
 
 export function setModel(d, modelId) {
   d.model = modelId; const m = modelOf(d); d.applyModel?.(m);

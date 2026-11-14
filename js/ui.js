@@ -128,13 +128,13 @@ const TABS = {
     ${alarmCard()}
     <div class="secrow"><div class="g"><b>Security</b> ${secChip()}</div>${[['home', 'At home'], ['away', 'Away'], ['disarmed', 'Disarm']].map(([v, l]) => `<button class="${home.security.mode === v ? 'on' : ''}" data-a="arm" data-v="${v}">${l}</button>`).join('')}</div>
     <h3>Scenes</h3><div class="hscroll">${Object.entries(SCENES).map(([k, x]) => `<button class="pill" data-a="scene" data-v="${k}"><span>${x.icon}</span>${x.name}</button>`).join('')}</div>
-    <div class="hscroll rooms">${[['all', 'All'], ...INDOOR.map(r => [r, ROOMS[r].name]), ['corridor', 'Entrance'], ['balcony', 'Balcony']].map(([v, l]) => `<button class="${ui.room === v ? 'on' : ''}" data-a="room" data-v="${v}">${l}</button>`).join('')}</div>
+    <div class="hscroll rooms">${[['all', 'All'], ...Object.keys(ROOMS).map(r => [r, r === 'corridor' ? 'Entrance' : ROOMS[r].name])].map(([v, l]) => `<button class="${ui.room === v ? 'on' : ''}" data-a="room" data-v="${v}">${l}</button>`).join('')}</div>
     <div class="tiles">${all ? `<div class="tile ${home.music.playing ? 'on' : ''}" data-a="page" data-v="music"><div class="ti">🎵</div><b>Background music</b><small>${home.music.playing ? '♪ ' + TRACKS[home.music.track].name : 'Stopped'}</small><button class="sw ${home.music.playing ? 'on' : ''}" data-a="play"></button></div>` : ''}${ds.map(tile).join('')}</div>`;
   },
   rooms() {
     const ds = Object.values(home.devices).filter(d => d.room === ui.room), order = ['light', 'curtain', 'ac', 'tv', 'speaker', 'lock', 'presence', 'climate', 'contact', 'hazard', 'sos', 'relay', 'camera', 'mixpad', 'switch'];
     ds.sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type));
-    return `<h2>Devices</h2>${chips([...INDOOR, 'corridor', 'balcony'].map(r => [r, ROOMS[r].name]), ui.room, 'room')}<h3>${ROOMS[ui.room].name} · ${ds.length} devices</h3><div class="cols">${ds.map(devCard).join('')}</div>`;
+    return `<h2>Devices</h2>${chips(Object.keys(ROOMS).map(r => [r, ROOMS[r].name]), ui.room, 'room')}<h3>${ROOMS[ui.room]?.name} · ${ds.length} devices</h3><div class="cols">${ds.map(devCard).join('')}</div>`;
   },
   smart() {
     return `<h2>Scenes &amp; Automation</h2><h3>Scenes — one tap</h3><div class="cols">${Object.entries(SCENES).map(([k, s]) => `<div class="card"><div class="row"><div style="font-size:24px">${s.icon}</div><div class="g"><b>${s.name}</b><div class="mut">${s.desc}</div></div><button class="btn pri" data-a="scene" data-v="${k}">Run</button></div></div>`).join('')}</div>
@@ -151,7 +151,7 @@ const TABS = {
     <h3>Smart lock</h3>${lockCard()}
     <h3>Sensors</h3><div class="cols">${[...ofType('contact'), ...ofType('presence'), ...ofType('hazard')].map(d => `<div class="kv"><span>${ROOMS[d.room].name} · ${d.name}</span>${d.type === 'contact' ? (d.state.open ? '<b style="color:var(--bad)">OPEN</b>' : 'closed') : d.type === 'presence' ? (d.state.present ? '<b style="color:var(--ok)">occupied</b>' : 'vacant') : (d.state.alarm ? '<b style="color:var(--bad)">ALARM</b>' : 'normal')}</div>`).join('')}</div>
     <h3>Test the protection — simulations</h3><div class="card"><div class="mut">Watch how ORVIBO reacts. Arm the system first to see the full response.</div>
-    <div class="chips" style="margin-top:8px">${[['armbreak', '🥷 Arm Home + balcony break-in'], ['breakin', '🥷 Balcony break-in'], ['forced', '🚪 Forced entry door'], ['tamper', '🔢 PIN guessing at the lock'], ['visitor', '🔔 Visitor rings doorbell'], ['smoke', '🔥 Smoke in kitchen'], ['gas', '💨 Gas leak'], ['leak', '💧 Water leak'], ['sos', '🆘 SOS pressed']].map(([v, l]) => `<button data-a="sim" data-v="${v}">${l}</button>`).join('')}</div></div>
+    <div class="chips" style="margin-top:8px">${[['armbreak', '🥷 Arm Home + window break-in'], ['breakin', '🥷 Window break-in'], ['forced', '🚪 Forced entry door'], ['tamper', '🔢 PIN guessing at the lock'], ['visitor', '🔔 Visitor rings doorbell'], ['smoke', '🔥 Smoke in kitchen'], ['gas', '💨 Gas leak'], ['leak', '💧 Water leak'], ['sos', '🆘 SOS pressed']].map(([v, l]) => `<button data-a="sim" data-v="${v}">${l}</button>`).join('')}</div></div>
     <h3>Event log</h3>${home.log.slice(0, 30).map(l => `<div class="log ${l.level}"><i>${l.t}</i>${l.text}</div>`).join('')}`;
   },
   music() {
@@ -378,7 +378,8 @@ export function updateHUD(dt, target, yaw, actors) {
   if (accM > 0.1) { accM = 0; drawMap(yaw, actors); if (ui.open === 'plan' && !hold) renderPlan(true); }
 }
 function drawMap(yaw, actors) {
-  const W = mm.width, Hh = mm.height, sc = 15.2, ox = 30, oz = 16, X = x => ox + x * sc, Z = z => oz + z * sc;
+  const W = mm.width, Hh = mm.height, [bx0, bz0, bx1, bz1] = home.meta.bounds, sc = Math.min((W - 24) / (bx1 - bx0), (Hh - 24) / (bz1 - bz0));
+  const ox = (W - (bx1 - bx0) * sc) / 2 - bx0 * sc, oz = (Hh - (bz1 - bz0) * sc) / 2 - bz0 * sc, X = x => ox + x * sc, Z = z => oz + z * sc;
   mc.clearRect(0, 0, W, Hh);
   for (const k in ROOMS) {
     const [x0, z0, x1, z1] = ROOMS[k].rect; let lum = 0; ofType('light').forEach(l => { if (l.room === k) lum += l.cur || 0; });

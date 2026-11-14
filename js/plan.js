@@ -9,7 +9,7 @@ import { actors } from './actors.js';
 import { ui, A, devCard, ICON, secChip, alarmCard, sw, chips, closeOverlay } from './ui.js';
 
 const $ = s => document.querySelector(s);
-const KEY = 'dh-orvibo-project-v1';
+const KEY0 = 'dh-orvibo-project-v1', projectKey = () => KEY0 + (home.meta.custom ? ':' + home.meta.id : '');      // each home keeps its own equipment list
 export const project = { customer: '' };
 export const P = { tab: 'control', sel: null, room: null, adding: null };
 const listable = d => d.cat !== 'none' && !d.gone;
@@ -28,7 +28,7 @@ function snapshot() {
   };
 }
 let saveT = 0;
-const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (e) { /* private mode */ } }, 300); };
+const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { try { localStorage.setItem(projectKey(), JSON.stringify(snapshot())); } catch (e) { /* private mode */ } }, 300); };
 function apply(cfg, quiet) {
   project.customer = cfg.customer || '';
   for (const d of Object.values(home.devices)) {
@@ -48,7 +48,7 @@ function apply(cfg, quiet) {
 export function loadSavedProject() {
   for (const d of Object.values(home.devices)) defaults[d.id] = d.model;
   layout();
-  try { const c = JSON.parse(localStorage.getItem(KEY) || 'null'); if (c && c.v === 1) apply(c, true); } catch (e) { /* ignore a damaged save */ }
+  try { const c = JSON.parse(localStorage.getItem(projectKey()) || 'null'); if (c && c.v === 1) apply(c, true); } catch (e) { /* ignore a damaged save */ }
 }
 bus.on('layout', () => { layout(); save(); }); bus.on('model', save);
 
@@ -78,10 +78,9 @@ const active = d => {
   switch (d.type) { case 'curtain': return s.pos < 50; case 'lock': return !s.locked; case 'contact': return s.open; case 'presence': return s.present; case 'hazard': return s.alarm; case 'camera': return s.on; case 'mixpad': case 'switch': case 'climate': case 'sos': return true; default: return !!s.on; }
 };
 const COL = { light: '#ffc65c', curtain: '#9db7ff', ac: '#63d2ff', tv: '#b48cff', speaker: '#ff9fd0', lock: '#ffb347', camera: '#c9a25a', relay: '#7fe0a8', contact: '#ff5c5c', presence: '#3ddc97', climate: '#7fd0e8', hazard: '#ff5c5c', sos: '#ff7a7a', mixpad: '#8fa8ff', switch: '#aab4c4' };
-const WINDOWS = [['x', 0, 1.3, 3.1], ['x', 0, 5, 7, 'ws_bed'], ['x', 0, 9.4, 10.4], ['z', 0, 5, 8, 'ws_liv'], ['z', 12, 5.5, 8, 'ws_mas']];
 
 function mapSVG() {
-  const custom = P.tab === 'custom'; let s = `<svg id="plan-svg" viewBox="-2.3 -0.7 15 13" class="${P.adding ? 'adding' : ''}" data-a="pmap">`;
+  const custom = P.tab === 'custom'; const [bx0, bz0, bx1, bz1] = home.meta.bounds; let s = `<svg id="plan-svg" viewBox="${bx0 - 0.7} ${bz0 - 0.7} ${bx1 - bx0 + 1.4} ${bz1 - bz0 + 1.4}" class="${P.adding ? 'adding' : ''}" data-a="pmap">`;
   for (const k in ROOMS) {
     const [x0, z0, x1, z1] = ROOMS[k].rect, R = ROOMS[k]; let lum = 0; ofType('light').forEach(l => { if (l.room === k) lum += l.cur || 0; });
     const occ = home.occupancy[k];
@@ -93,8 +92,9 @@ function mapSVG() {
     s += `<rect class="${c.wall || c.sill ? 'wall' : 'furn'}" x="${c.x0.toFixed(2)}" y="${c.z0.toFixed(2)}" width="${w.toFixed(2)}" height="${d.toFixed(2)}"/>`;
   }
   for (const k in ROOMS) { const [x0, , , z1] = ROOMS[k].rect, c = home.climate[k]; s += `<text class="rl" x="${x0 + 0.2}" y="${z1 - 0.22}">${ROOMS[k].name}${c ? ` · ${c.temp.toFixed(1)}° · ${c.hum.toFixed(0)}%` : ''}</text>`; }
-  for (const [ax, at, a, b, id] of WINDOWS) { const o = id && dev(id).state.open; s += ax === 'x' ? `<line class="win ${o ? 'open' : ''}" x1="${a}" y1="${at}" x2="${b}" y2="${at}"/>` : `<line class="win ${o ? 'open' : ''}" x1="${at}" y1="${a}" x2="${at}" y2="${b}"/>`; }
-  const lk = dev('lock'), ang = lk.cur || 0; s += `<line class="door ${lk.state.open ? 'open' : ''}" x1="5.26" y1="9" x2="${(5.26 + Math.cos(ang) * 0.9).toFixed(2)}" y2="${(9 - Math.sin(ang) * 0.9).toFixed(2)}"/>`;
+  for (const [ax, at, a, b, id] of home.meta.windows) { const o = id && dev(id)?.state.open; s += ax === 'x' ? `<line class="win ${o ? 'open' : ''}" x1="${a}" y1="${at}" x2="${b}" y2="${at}"/>` : `<line class="win ${o ? 'open' : ''}" x1="${at}" y1="${a}" x2="${at}" y2="${b}"/>`; }
+  const lk = dev('lock'), ang = lk.cur || 0, dr = lk.door, co = Math.cos(ang) * 0.9, si = Math.sin(ang) * 0.9;
+  s += `<line class="door ${lk.state.open ? 'open' : ''}" x1="${dr.hx}" y1="${dr.hz}" x2="${(dr.hx + dr.ax * co - dr.nx * si).toFixed(2)}" y2="${(dr.hz + dr.az * co - dr.nz * si).toFixed(2)}"/>`;
   for (const d of everything()) {
     if (!d.mp) continue; const inst = d.installed !== false; if (!inst && !custom) continue;
     const on = inst && active(d), alert = inst && ((d.type === 'contact' && d.state.open) || (d.type === 'hazard' && d.state.alarm) || (d.type === 'camera' && d.state.rec));
@@ -127,7 +127,7 @@ function controlSide() {
   const inst = everything().filter(x => x.installed !== false);
   return `${alarmCard()}<div class="stat"><div><b>${inst.length}</b><span>items</span></div><div><b>${ofType('light').filter(l => l.state.on).length}</b><span>lights on</span></div><div><b>${Math.round(home.energy)} W</b><span>power</span></div><div><b>${home.outdoor.temp.toFixed(0)}°</b><span>outdoor</span></div></div>
     <h3>Whole home</h3><div class="chips"><button data-a="pall" data-v="lon">All lights on</button><button data-a="pall" data-v="loff">All lights off</button><button data-a="pall" data-v="copen">Open curtains</button><button data-a="pall" data-v="cclose">Close curtains</button><button data-a="pall" data-v="acoff">All AC off</button><button data-a="cctv">Cameras</button></div>
-    <h3>Rooms</h3>${[...INDOOR, 'balcony'].map(k => { const c = home.climate[k], n = ofType('light').filter(l => l.room === k && l.state.on).length; return `<div class="prow" data-a="proom" data-v="${k}"><span class="pi">${home.occupancy[k] ? '🟢' : '⚪'}</span><div class="g"><b>${ROOMS[k].name}</b><small>${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % · ` : ''}${n} light${n === 1 ? '' : 's'} on</small></div><span class="mut">›</span></div>`; }).join('')}
+    <h3>Rooms</h3>${Object.keys(ROOMS).filter(k => k !== 'corridor').map(k => { const c = home.climate[k], n = ofType('light').filter(l => l.room === k && l.state.on).length; return `<div class="prow" data-a="proom" data-v="${k}"><span class="pi">${home.occupancy[k] ? '🟢' : '⚪'}</span><div class="g"><b>${ROOMS[k].name}</b><small>${c ? `${c.temp.toFixed(1)} °C · ${c.hum.toFixed(0)} % · ` : ''}${n} light${n === 1 ? '' : 's'} on</small></div><span class="mut">›</span></div>`; }).join('')}
     <div class="mut" style="margin-top:12px">Click a room or an icon on the plan. Click a selected icon again to switch it. The plan is live: it follows what happens in the apartment.</div>`;
 }
 
@@ -137,7 +137,7 @@ function bom() {
   return [...m.entries()].map(([k, q]) => { const [cat, name] = k.split('|'); return { cat, name, q }; }).sort((a, b) => a.cat.localeCompare(b.cat) || a.name.localeCompare(b.name));
 }
 function customSide() {
-  const groups = [...INDOOR, 'balcony', 'corridor'].map(k => [k, everything().filter(d => d.room === k)]).filter(([, l]) => l.length), list = bom();
+  const groups = Object.keys(ROOMS).map(k => [k, everything().filter(d => d.room === k)]).filter(([, l]) => l.length), list = bom();
   return `<div class="card"><div class="row"><label>Customer / project</label><input type="text" data-c="cust" value="${project.customer.replace(/"/g, '&quot;')}" placeholder="e.g. Villa 12 — Mr. Ahmed"></div>
       <div class="mut">Everything here is saved in this browser and can be exported as a project file.</div></div>
     <h3>Start from a package</h3><div class="chips">${Object.entries(PRESETS).map(([k, [l]]) => `<button data-a="preset" data-v="${k}">${l}</button>`).join('')}</div>
@@ -197,7 +197,7 @@ export function initPlan() {
       if (v === 'acoff') ofType('ac').forEach(a => set(a.id, { on: false }, 'app'));
     },
     pgo: (v, id) => {
-      const d = dev(id), r = ROOMS[INDOOR.includes(d.room) ? d.room : 'living'].rect, cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2;
+      const d = dev(id), r = ROOMS[INDOOR.includes(d.room) ? d.room : INDOOR[0]].rect, cx = (r[0] + r[2]) / 2, cz = (r[1] + r[3]) / 2;
       let dx = cx - d.pos.x, dz = cz - d.pos.z; const l = Math.hypot(dx, dz) || 1, k = Math.min(1.4, l); dx = dx / l * k; dz = dz / l * k;
       const x = Math.max(r[0] + 0.5, Math.min(r[2] - 0.5, d.pos.x + dx)), z = Math.max(r[1] + 0.5, Math.min(r[3] - 0.5, d.pos.z + dz));
       const hx = d.pos.x - x, hz = d.pos.z - z; closeOverlay(); if (ui.site) ui.enterSim(); bus.emit('teleport', { x, z, yaw: Math.atan2(-hx, -hz), pitch: Math.atan2(d.pos.y - 1.66, Math.hypot(hx, hz) || 1) });

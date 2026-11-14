@@ -58,6 +58,7 @@ bus.on('alarm', a => { if (intruder.active && a.type === 'intrusion' && onIntrus
 export function breakIn() {
   if (busy()) return notify('A simulation is already running', '', 'warn');
   const armed = home.security.mode !== 'disarmed';
+  if (home.meta.custom) return breakInGeneric(armed);
   notify('Simulation started', 'An intruder is climbing onto the balcony…', 'warn');
   place(intruder, -1.1, 5.2);
   let fled = false;
@@ -81,26 +82,45 @@ export function breakIn() {
   });
 }
 
+// The same story in a home generated from a floor plan: through the first window that has a sensor.
+function breakInGeneric(armed) {
+  const w = home.meta.breakin; if (!w) return notify('This home has no window to break in through', 'Add a window in the layout, or try the forced-door simulation.', 'warn');
+  notify('Simulation started', 'An intruder is at a window…', 'warn');
+  const out = [w.x + w.nx * 1.3, w.z + w.nz * 1.3], at = [w.x + w.nx * 0.45, w.z + w.nz * 0.45], inn = [w.x - w.nx * 0.8, w.z - w.nz * 0.8];
+  place(intruder, out[0] + w.nz * 1.5, out[1] + w.nx * 1.5); let fled = false;
+  const back = (speed, msg) => go(intruder, [inn, at, out], speed, () => { leave(intruder); set(w.id, { open: false }, 'sim'); if (msg) notify('Intruder fled', 'The siren, lights and cameras drove the intruder away. A video clip was saved to the cloud.', 'ok'); });
+  onIntrusion = () => { intruder.wait = 0; setTimeout(() => { if (!fled) { fled = true; back(3.4, true); } }, 2500); };
+  go(intruder, [[...out, 1.0], [...at, 0.9, () => set(w.id, { open: true }, 'sim')], [...inn, 0.4], [w.cx, w.cz, 4]], 1.3, () => {
+    if (fled) return;
+    if (!home.security.alarm) { notify('No alarm was raised', armed ? '' : 'The system was disarmed, so the intruder walked in unnoticed. Arm “Home” or “Away” and try again.', 'warn'); fled = true; back(1.6, false); }
+  });
+}
+// where people stand at the entry door of whichever home is loaded
+const doorSpots = () => { const e = home.meta.entry; return { stand: [e.x + e.nx * 0.65, e.z + e.nz * 0.65], away: [e.x + e.nx * 1.9 + e.nz * 1.0, e.z + e.nz * 1.9 + e.nx * 1.0], inside: [e.x - e.nx * 0.9, e.z - e.nz * 0.9], face: Math.atan2(-e.nx, -e.nz) }; };
+
 // --- Scenario 2: someone guesses PIN codes at the door ---
 export function lockTamper() {
   if (busy()) return notify('A simulation is already running', '', 'warn');
   if (dev('lock').state.open) return notify('Close the entry door first', '', 'warn');
   notify('Simulation started', 'A stranger is trying PIN codes at the entry door…', 'warn');
-  place(intruder, 3.6, 11.0);
-  const tries = []; for (let i = 0; i < 5; i++) tries.push([5.85, 9.55 + (i % 2) * 0.01, 1.1, () => unlockAttempt('PIN', false, 'unknown')]);
-  go(intruder, [[5.85, 9.6, 0.8], ...tries, [5.85, 9.6, 1.5], [3.5, 11.1]], 1.5, () => leave(intruder));
+  const sp = home.meta.custom ? doorSpots() : { stand: [5.85, 9.6], away: [3.6, 11.0] };
+  place(intruder, ...sp.away);
+  const tries = []; for (let i = 0; i < 5; i++) tries.push([sp.stand[0], sp.stand[1] + (i % 2) * 0.01, 1.1, () => unlockAttempt('PIN', false, 'unknown')]);
+  go(intruder, [[...sp.stand, 0.8], ...tries, [...sp.stand, 1.5], sp.away], 1.5, () => leave(intruder));
 }
 
 // --- Scenario 3: courier rings the bell ---
 export function visitorRings() {
   if (busy()) return notify('A simulation is already running', '', 'warn');
-  place(visitor, 3.6, 10.9);
-  go(visitor, [[5.75, 9.75, 0.3, () => { visitor.mesh.rotation.y = Math.PI; ringDoorbell('Courier with a parcel'); }], [5.75, 9.76, 22], [3.5, 11.0]], 1.4, () => { leave(visitor); home.doorbell = null; });
+  const sp = home.meta.custom ? doorSpots() : { stand: [5.75, 9.75], away: [3.6, 10.9], face: Math.PI };
+  place(visitor, ...sp.away);
+  go(visitor, [[...sp.stand, 0.3, () => { visitor.mesh.rotation.y = sp.face; ringDoorbell('Courier with a parcel'); }], [sp.stand[0], sp.stand[1] + 0.01, 22], sp.away], 1.4, () => { leave(visitor); home.doorbell = null; });
 }
 // --- Scenario 4: forced entry through the door while armed ---
 export function forcedDoor() {
   if (busy()) return notify('A simulation is already running', '', 'warn');
   notify('Simulation started', 'Someone is forcing the entry door…', 'warn');
-  place(intruder, 3.6, 11.0);
-  go(intruder, [[5.7, 9.7, 1.2, () => { const l = dev('lock'); l.state.forced = true; set('lock', { open: true, forced: true }, 'sim'); }], [5.7, 8.2, 3], [5.7, 9.7], [3.5, 11.1]], 1.6, () => leave(intruder));
+  const sp = home.meta.custom ? doorSpots() : { stand: [5.7, 9.7], away: [3.6, 11.0], inside: [5.7, 8.2] };
+  place(intruder, ...sp.away);
+  go(intruder, [[...sp.stand, 1.2, () => { const l = dev('lock'); l.state.forced = true; set('lock', { open: true, forced: true }, 'sim'); }], [...sp.inside, 3], sp.stand, sp.away], 1.6, () => leave(intruder));
 }

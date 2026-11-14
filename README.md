@@ -41,6 +41,28 @@ The build step in `wrangler.jsonc` publishes the single-file edition (`standalon
 bundled and minified so phones load it in one request) as `index.html`, plus `site-config.json`.
 Run `tools/build-standalone.sh` after changing the source so the published file is current.
 
+## Simulate another home (floor plan or video)
+
+The simulator opens on the demo apartment. The section "Simulate another home" builds a different one:
+
+1. **Load** an architectural floor-plan picture, or a video and choose the frame that shows the plan
+   (you can also draw on an empty 1 m grid).
+2. **Set the scale**: click two points and type the real distance between them.
+3. **Trace the rooms** as rectangles and choose each room's type. On clean plans with solid dark walls,
+   "Auto-detect rooms" proposes them for you; "Doors between rooms" adds a door on every shared wall.
+4. **Mark** doors, windows and the entry door, then press **Build the simulation**.
+
+The simulator then generates the structure (walls, openings, floors, an entrance porch), basic
+furniture and a full ORVIBO installation in every room — lights, switches, sensors, curtains, AC,
+music, cameras and the smart lock. The 2D diagram, Control Centre, scenes, automations and security
+simulations all work on the generated home, and every device can be changed under "Customise project".
+Homes are saved in the browser and can be loaded, edited or deleted; "Back to the demo apartment"
+restores the default.
+
+Limits worth knowing: rooms are rectangles (an L-shaped room is traced as two); the plan is traced,
+not reconstructed — a video only supplies a frame to trace over, there is no automatic 3D
+reconstruction from footage; auto-detection is a best-effort helper for clean plans.
+
 ## Admin panel
 
 Open it with the **Admin** link in the footer, or add `#admin` to the address. Default PIN: `1234`
@@ -160,6 +182,8 @@ visitor at the doorbell, smoke, gas leak, water leak and SOS.
 | `js/site.js`, `css/site.css` | Website, catalogue content and the admin panel |
 | `site-config.json` | Published configuration (placeholder until you export your own) |
 | `js/lights.js` | Light pool |
+| `js/builder.js` | Floor-plan editor (image / video frame, scale, rooms, openings, auto-detect) |
+| `js/custom.js` | Generates a home — structure, furniture, devices — from a traced layout |
 | `js/world.js` | Architecture, furniture, materials, sky |
 | `js/devices.js` | Every device: model, state, hand interaction |
 | `js/sim.js` | Scenes, automations, security, climate, energy |

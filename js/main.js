@@ -11,7 +11,8 @@ import { buildDevices } from './devices.js';
 import { buildPool, updatePool, refreshShadows, photoLights } from './lights.js';
 import { buildActors, updateActors, actors } from './actors.js';
 import { home, bus, roomAt, ofType, dev, has, set, clamp, notify } from './state.js';
-import { tickSim, arm, runScene } from './sim.js';
+import { tickSim, arm, runScene, syncTriggers } from './sim.js';
+import { buildCustomWorld, buildCustomDevices } from './custom.js';
 import { audio } from './audio.js';
 import { focusCategory } from './plan.js';
 import { ui, initUI, updateHUD, toggle, closeOverlay, cctvGrid, cctvCams, paintFeeds, refreshPlanMap } from './ui.js';
@@ -295,7 +296,7 @@ function frameStep() {
   for (const u of updaters) u(dt, t);
   if (home.time !== lastSky) { lastSky = home.time; updateSky(home.time); }
   if (frame % 12 === 0) for (const m of mirrors) m.visible = mirrorsOn && !photoOn && roomAt(m.position.x + (m.position.x < 7.5 ? -0.3 : 0.3), m.position.z) === home.player.room;
-  updatePool(ui.open === 'cctv' ? cctvRef : camera.position, ui.open === 'cctv' ? 'living' : home.player.room);
+  updatePool(ui.open === 'cctv' ? cctvRef : camera.position, ui.open === 'cctv' ? roomAt(cctvRef.x, cctvRef.z) : home.player.room);
   if (Math.abs(home.time - lastSun) > 0.03) { lastSun = home.time; dirty.sun = true; }
   if (dirty.all) { refreshShadows(); dirty.all = false; dirty.living = false; dirty.sun = true; }
   if (dirty.living) { refreshShadows('living'); dirty.living = false; }
@@ -319,7 +320,12 @@ canvas.addEventListener('webglcontextrestored', () => { if (ui.quality !== 'low'
 function boot() {
   const cfg = (window.DH && window.DH.sim) || {};
   if (cfg.quality) ui.quality = cfg.quality; if (cfg.time != null) home.time = +cfg.time; if (cfg.season) home.season = cfg.season; if (cfg.tour != null) ui.tour = !!cfg.tour;
-  buildWorld(); const stat = mergeStatic(); freezeStatic(); buildDevices(); buildActors();
+  // the demo apartment, or a home generated from a floor plan the user traced
+  const layout = window.DH && window.DH.layout; let stat;
+  if (layout) { buildCustomWorld(layout); stat = mergeStatic(); freezeStatic(); buildCustomDevices(); syncTriggers(); }
+  else { buildWorld(); stat = mergeStatic(); freezeStatic(); buildDevices(); }
+  buildActors();
+  Object.assign(player, { x: home.meta.start.x, z: home.meta.start.z, yaw: home.meta.start.yaw }); lookY = player.yaw; cctvRef.set(home.meta.center.x, 1.6, home.meta.center.z);
   home.player.x = player.x; home.player.z = player.z; home.player.room = 'corridor';
   ui.site = true; initUI(); home.log.length = 0;
   console.info(`Apartment built: ${stat.before} static meshes merged into ${stat.after}`);
@@ -359,7 +365,7 @@ async function enterSim() {
   }
   audio.init(); resize(); initUI();
   started = true; entering = false; clock.last = performance.now(); fAcc = fN = 0; lock(); raf = requestAnimationFrame(loop);
-  if (!welcomed) { welcomed = true; setTimeout(() => notify('Welcome to apartment A·1204', isTouch ? 'Walk to the door with the left stick and tap USE on the smart lock.' : 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600); }
+  if (!welcomed) { welcomed = true; setTimeout(() => notify(home.meta.custom ? `Welcome to ${home.meta.name}` : 'Welcome to apartment A·1204', isTouch ? 'Walk to the door with the left stick and tap USE on the smart lock.' : 'Walk to the door and press E on the smart lock to unlock it.', 'info'), 600); }
 }
 function exitSim() {
   if (!started) return;

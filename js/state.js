@@ -16,6 +16,14 @@ export const ROOMS = {
   balcony:  { name: 'Balcony',         rect: [-1.6, 4.6, 0, 8.4], outside: true },
 };
 export const INDOOR = ['living', 'kitchen', 'bedroom', 'master', 'bath'];
+for (const k of INDOOR) ROOMS[k].rtype = k;
+// A different home (built from a floor plan) replaces the room table before anything is created.
+export function setRooms(rooms) {
+  for (const k in ROOMS) delete ROOMS[k]; Object.assign(ROOMS, rooms);
+  INDOOR.length = 0; INDOOR.push(...Object.keys(rooms).filter(k => !rooms[k].outside));
+  home.climate = {}; home.occupancy = {};
+  for (const r of INDOOR) { home.climate[r] = { temp: 28.5, hum: 48 }; home.occupancy[r] = false; }
+}
 
 export function roomAt(x, z) {
   for (const k in ROOMS) {
@@ -45,6 +53,9 @@ export const home = {
     { name: 'Family', fp: true, face: false, pin: '1122', card: false },
   ],
   tempPin: null,
+  // where things are in the current home (the demo apartment unless a custom layout is loaded)
+  meta: { custom: false, id: 'demo', name: 'Demo apartment', start: { x: 5.7, z: 10.9, yaw: 0 }, entry: { x: 5.72, z: 9, nx: 0, nz: 1 }, center: { x: 6, z: 4.5 }, bounds: [-1.6, 0, 12, 11.6],
+    windows: [['x', 0, 1.3, 3.1], ['x', 0, 5, 7, 'ws_bed'], ['x', 0, 9.4, 10.4], ['z', 0, 5, 8, 'ws_liv'], ['z', 12, 5.5, 8, 'ws_mas']], breakin: null },
 };
 for (const r of INDOOR) { home.climate[r] = { temp: 28.5, hum: 48 }; home.occupancy[r] = false; }
 
@@ -63,7 +74,7 @@ export function changed() {
 // Patch a device's state. `src` tells automations who did it (hand / app / scene / auto / sim).
 export function set(id, patch, src = 'app') {
   const d = home.devices[id];
-  if (!d) { console.warn('unknown device', id); return; }
+  if (!d) return;                                   // this home has no such device: scenes simply skip it
   // A device that is not installed in this project is invisible to the smart system:
   // physical changes (a window opened by hand) still happen, but nothing is reported.
   if (d.installed === false) { if (src === 'hand' || src === 'sim' || src === 'sensor') Object.assign(d.state, patch); return; }

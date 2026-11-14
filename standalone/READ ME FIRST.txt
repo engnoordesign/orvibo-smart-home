@@ -9,6 +9,11 @@ WHAT YOU GET
   - The live 2D diagram of the apartment: control everything, customise the installed items
   - "Enter simulation": the 3D walk-through of the same apartment
 
+SIMULATE ANOTHER HOME
+  In the section "Simulate another home": load a floor-plan picture (or a video and
+  pick a frame), set the scale, trace the rooms, mark doors and windows, then build.
+  The demo apartment stays available with "Back to the demo apartment".
+
 ADMIN PANEL
   Click "Admin" at the bottom of the page. Default PIN: 1234.
   Edit texts, sections, benefits, products, models, specifications and contact details.

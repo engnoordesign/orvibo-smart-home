@@ -132,13 +132,14 @@ function plane(w, d, mat, x, y, z) {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
   m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.receiveShadow = true; scene.add(m); return m;
 }
-function floor(x0, z0, x1, z1, tex, scale, extra = {}) {
+export const TEX = { wood: () => woodTex, tile: () => tileTex, stone: () => stoneTex };
+export function floor(x0, z0, x1, z1, tex, scale, extra = {}) {
   const t = tex.clone(); t.needsUpdate = true; t.repeat.set((x1 - x0) / scale, (z1 - z0) / scale);
   B(x1 - x0, 0.2, z1 - z0, std({ map: t, bumpMap: t, bumpScale: 1.2, roughness: 0.5, ...extra }), (x0 + x1) / 2, -0.1, (z0 + z1) / 2, { cast: false });
 }
 
 // Walls with openings. ops: [{a,b,y0,y1}] along the wall axis.
-function wall(axis, at, s0, s1, ops = [], t = 0.16, mat = M.wall) {
+export function wall(axis, at, s0, s1, ops = [], t = 0.16, mat = M.wall) {
   const seg = (a, b, y0, y1) => {
     if (b - a < 0.01 || y1 - y0 < 0.01) return;
     const o = { collide: y0 < 1.0, occ: true, wall: y0 === 0 && y1 === H, sill: !(y0 === 0 && y1 === H) };
@@ -151,7 +152,7 @@ function wall(axis, at, s0, s1, ops = [], t = 0.16, mat = M.wall) {
   }
   seg(cur, s1, 0, H);
 }
-function doorFrame(axis, at, a, b, top = 2.1) {
+export function doorFrame(axis, at, a, b, top = 2.1) {
   const f = M.walnut, t = 0.2, w = 0.06;
   if (axis === 'x') { B(w, top, t, f, a + w / 2, top / 2, at); B(w, top, t, f, b - w / 2, top / 2, at); B(b - a, w, t, f, (a + b) / 2, top - w / 2, at); }
   else { B(t, top, w, f, at, top / 2, a + w / 2); B(t, top, w, f, at, top / 2, b - w / 2); B(t, w, b - a, f, at, top - w / 2, (a + b) / 2); }
@@ -224,7 +225,7 @@ export let dayFactor = 0;
 export function updateSky(t) {
   const a = (t - 6) / 12.6 * Math.PI, elev = Math.sin(a);
   dayFactor = clamp(elev * 3.5 + 0.15, 0, 1);
-  sun.position.set(6 + Math.cos(a) * 40, Math.max(elev, 0.03) * 34 + 1.5, 4.5 + 12);
+  sun.position.set(area.x + Math.cos(a) * 40, Math.max(elev, 0.03) * 34 + 1.5, area.z + 12);
   sun.intensity = clamp(elev * 4, 0, 1) * 3.4;
   sun.color.set(0xff9350).lerp(cTmp.set(0xfff3e2), clamp(elev * 2.2, 0, 1));
   const tw = clamp(1 - Math.abs(elev - 0.02) / 0.3, 0, 1);
@@ -234,7 +235,13 @@ export function updateSky(t) {
   if (cityMat) cityMat.emissiveIntensity = 1.6 * (1 - dayFactor);
 }
 
-function buildSky() {
+// The sun and its shadow follow the footprint of whichever home is loaded.
+const area = { x: 6, z: 4.5 };
+export function setArea(cx, cz, half) {
+  area.x = cx; area.z = cz; sun.target.position.set(cx, 0, cz); sun.target.updateMatrixWorld();
+  Object.assign(sun.shadow.camera, { left: -half, right: half, top: half, bottom: -half }); sun.shadow.camera.updateProjectionMatrix();
+}
+export function buildSky() {
   scene.background = new THREE.Color(0x05070f);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -11, right: 11, top: 11, bottom: -11, near: 1, far: 90 });
@@ -301,14 +308,14 @@ export function buildWorld() {
   living(); kitchen(); bedroom(); master(); bath();
 }
 
-function leafy(x, y, z, s = 1) {
+export function leafy(x, y, z, s = 1) {
   for (let i = 0; i < 9; i++) {
     const m = new THREE.Mesh(new THREE.SphereGeometry(0.16 * s, 8, 6), M.plant);
     m.scale.set(0.6, 1.6 + rnd(), 0.25); m.position.set(x + (rnd() - 0.5) * 0.3 * s, y + 0.3 * s + rnd() * 0.5 * s, z + (rnd() - 0.5) * 0.3 * s);
     m.rotation.set(rnd() - 0.5, rnd() * 3, rnd() - 0.5); m.castShadow = true; scene.add(m);
   }
 }
-function rug(x, z, w, d, color) { B(w, 0.015, d, std({ color, roughness: 1, map: fabricTex }), x, 0.008, z, { cast: false }); }
+export function rug(x, z, w, d, color) { B(w, 0.015, d, std({ color, roughness: 1, map: fabricTex }), x, 0.008, z, { cast: false }); }
 function picture(tex, w, h, x, y, z, rotY) {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; scene.add(g);
   B(w + 0.06, h + 0.06, 0.03, M.black, 0, 0, 0, { parent: g });

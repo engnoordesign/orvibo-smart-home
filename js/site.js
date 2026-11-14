@@ -1,6 +1,7 @@
 // Website: product catalogue, benefits, live apartment diagram, simulator entry — and the admin panel
 // that edits all of it. No 3D code is loaded here; the simulator engine is imported afterwards.
 import { CATALOG } from './catalog.js';
+import { openBuilder, ROOM_TYPES } from './builder.js';
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -44,6 +45,7 @@ function defaults() {
       { id: 'benefits', on: true, title: 'Why a smart home', sub: 'What changes on the first day you live with it.' },
       { id: 'products', on: true, title: 'The ORVIBO range', sub: 'Advantages, models and specifications of every item in the system.' },
       { id: 'apartment', on: true, title: 'The apartment, live', sub: 'The same apartment as the 3D simulation. Every icon is a real device: click it to control it, or open “Customise project” to choose what is installed.' },
+      { id: 'builder', on: true, title: 'Simulate another home', sub: 'Load an architectural floor plan — or a video, and pick the frame that shows the plan — trace the rooms, and the simulator builds that home with a full ORVIBO installation.' },
       { id: 'simulator', on: true, title: 'Walk through it', sub: 'Step inside in first person and use everything by hand, from the MixPad or from the phone app.' },
       { id: 'contact', on: true, title: 'Talk to us', sub: 'We design, supply and install complete ORVIBO systems.' },
     ],
@@ -135,6 +137,13 @@ const SECTIONS = {
       ${enterBtn(cfg.hero.cta, 'cta big')}
       <div class="keys">${(TOUCH ? [['Left stick', 'walk'], ['Drag', 'look around'], ['USE', 'operate a device'], ['INFO', 'details & model'], ['APP', 'phone app'], ['MAP', 'control centre'], ['CAM', 'cameras']] : [['W A S D', 'walk'], ['Mouse', 'look'], ['E', 'use'], ['Q', 'inspect'], ['Tab', 'phone app'], ['F', 'control centre'], ['C', 'cameras'], ['Esc', 'free the mouse']]).map(([k, v]) => `<span><b>${k}</b>${v}</span>`).join('')}</div>
       <p class="fine">${TOUCH ? 'The simulation always plays in landscape: turn your phone sideways. If it feels slow, keep Graphics on “Low”.' : 'Runs in your browser. If it feels slow, choose “Low”.'}</p></div></section>`,
+  builder: s => {
+    const all = layouts(), act = localStorage.getItem(ACTIVE), cur = act && all[act];
+    return `<section id="builder-sec">${head(s)}<div class="bcur"><div><small>Home loaded now</small><b>${cur ? esc(cur.name) : 'Demo apartment (default)'}</b><span>${cur ? `${cur.rooms.length} rooms traced from a plan` : 'Living room, kitchen, two bedrooms and a bathroom'}</span></div>
+      <button class="cta" data-s="b-new">Build a home from a floor plan</button>${cur ? '<button class="ghost2" data-s="b-demo">Back to the demo apartment</button>' : ''}</div>
+      ${Object.keys(all).length ? `<div class="bsaved">${Object.values(all).map(l => `<div class="${l.id === act ? 'on' : ''}"><b>${esc(l.name)}</b><small>${l.rooms.length} rooms · ${l.rooms.map(r => r.name || ROOM_TYPES[r.type] || 'Room').slice(0, 4).map(esc).join(', ')}${l.rooms.length > 4 ? '…' : ''}</small><span>${l.id === act ? '<i>loaded</i>' : `<button data-s="b-load" data-v="${esc(l.id)}">Load</button>`}<button data-s="b-edit" data-v="${esc(l.id)}">Edit</button><button data-s="b-del" data-v="${esc(l.id)}">Delete</button></span></div>`).join('')}</div>` : ''}
+      <ol class="bsteps"><li><b>Load</b> a floor-plan picture, or a video and choose the frame that shows the plan. You can also draw on an empty grid.</li><li><b>Set the scale</b> by clicking two points and typing the real distance.</li><li><b>Trace the rooms</b> as rectangles, or try “Auto-detect rooms” on a clean plan.</li><li><b>Mark</b> doors, windows and the entry door, then press “Build the simulation”.</li></ol></section>`;
+  },
   contact: s => {
     const b = cfg.brand, rows = [['Phone', b.phone, b.phone && `tel:${b.phone}`], ['WhatsApp', b.whatsapp, b.whatsapp && `https://wa.me/${b.whatsapp.replace(/\D/g, '')}`], ['Email', b.email, b.email && `mailto:${b.email}`], ['Address', b.address], ['Hours', b.hours]].filter(r => r[1]);
     return `<section id="contact">${head(s)}<div class="contact">${rows.map(([k, v, h]) => `<div><small>${k}</small>${h ? `<a href="${esc(h)}">${esc(v)}</a>` : `<b>${esc(v)}</b>`}</div>`).join('') || '<div><small>Contact details</small><b>Add them in the admin panel.</b></div>'}</div></section>`;
@@ -166,6 +175,11 @@ document.addEventListener('click', e => {
     case 'filter': filter = v; render(); break;
     case 'show': $('#apartment')?.scrollIntoView({ behavior: 'smooth' }); if (window.DH.focusCategory && !window.DH.focusCategory(v)) toast('This item is not installed in the current project', 'Switch it on under “Customise project”.'); break;
     case 'admin': openAdmin(); break;
+    case 'b-new': openBuilder($('#builder'), null, saveLayout); break;
+    case 'b-edit': openBuilder($('#builder'), layouts()[v], saveLayout); break;
+    case 'b-load': localStorage.setItem(ACTIVE, v); location.hash = '#apartment'; location.reload(); break;
+    case 'b-demo': localStorage.removeItem(ACTIVE); location.hash = '#apartment'; location.reload(); break;
+    case 'b-del': if (confirm('Delete this saved home?')) { const all = layouts(); delete all[v]; localStorage.setItem(LAYOUTS, JSON.stringify(all)); if (localStorage.getItem(ACTIVE) === v) { localStorage.removeItem(ACTIVE); location.reload(); } else render(); } break;
   }
 });
 document.addEventListener('change', e => {
@@ -250,10 +264,21 @@ $('#admin').addEventListener('click', e => {
 });
 
 // ---------- start ----------
-window.DH = { sim: cfg.sim, onReady() { engine = 'ready'; render(); }, onError() { engine = 'error'; render(); const m = document.querySelector('#plan-map'); if (m) m.innerHTML = '<div class="plan-wait">The live diagram could not start in this browser.</div>'; } };
+// A home traced from a floor plan replaces the demo apartment when one is active.
+const LAYOUTS = 'dh-layouts', ACTIVE = 'dh-layout-active';
+const layouts = () => { try { return JSON.parse(localStorage.getItem(LAYOUTS) || '{}'); } catch (e) { return {}; } };
+const activeLayout = () => { const id = localStorage.getItem(ACTIVE); return (id && layouts()[id]) || null; };
+// a finished layout is stored and becomes the active home; the page reloads so the engine builds it
+function saveLayout(layout) {
+  const all = layouts(); all[layout.id] = layout;
+  try { localStorage.setItem(LAYOUTS, JSON.stringify(all)); localStorage.setItem(ACTIVE, layout.id); } catch (e) { return toast('This browser could not save the layout', 'Storage is full or blocked.'); }
+  location.hash = '#apartment'; location.reload();
+}
+window.DH = { sim: cfg.sim, layout: activeLayout(), onReady() { engine = 'ready'; render(); }, onError() { if (window.DH.layout && !sessionStorage.getItem('dh-layout-failed')) { sessionStorage.setItem('dh-layout-failed', '1'); localStorage.removeItem(ACTIVE); location.reload(); return; } engine = 'error'; render(); const m = document.querySelector('#plan-map'); if (m) m.innerHTML = '<div class="plan-wait">The live diagram could not start in this browser.</div>'; } };
 (async () => {
   await load(); window.DH.sim = cfg.sim; syncCatalog(); render();
   if (location.hash === '#admin') openAdmin();
+  if (sessionStorage.getItem('dh-layout-failed')) { sessionStorage.removeItem('dh-layout-failed'); setTimeout(() => toast('That layout could not be built', 'The demo apartment was loaded instead. Open the layout with “Edit” and check the rooms and the entry door.'), 1500); }
   // load the simulator engine after the page has painted, so the site itself appears instantly
   setTimeout(() => import('./main.js').catch(e => { console.error(e); window.DH.onError(); }), 60);
 })();
