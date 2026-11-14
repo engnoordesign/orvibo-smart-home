@@ -99,7 +99,21 @@ ui.onPhoto = photo;
 const keys = new Set(); let started = false, target = null, muted = false;
 const locked = () => document.pointerLockElement === canvas;
 const isTouch = matchMedia('(pointer: coarse)').matches && 'ontouchstart' in window;
-function lock() { if (isTouch || ui.open || !started) return; try { const p = canvas.requestPointerLock(); p?.catch?.(() => { }); } catch (e) { /* drag-look fallback stays available */ } }
+// Looking around must resume by itself after a menu or the phone closes — no extra click.
+// The browser only lets a page capture the mouse right after a click or key press (and never on Esc),
+// so until it agrees, `freeLook` turns the view from plain mouse movement, and the capture is
+// retried on the next key press.
+let freeLook = false; const mouse = { x: 0.5, inside: false };
+function lock() {
+  if (isTouch || ui.open || !started) return;
+  freeLook = true;
+  try { const p = canvas.requestPointerLock(); p?.catch?.(() => { }); } catch (e) { /* free-look keeps working */ }
+}
+document.addEventListener('pointerlockchange', () => {
+  // the mouse was released while playing (Esc): leave the cursor free until the player acts again
+  if (!locked() && started && !ui.open) freeLook = false;
+  canvas.style.cursor = '';
+});
 ui.relock = lock;
 function interact() { if (target && !ui.open) target.act(); }
 function inspect() { if (target && !ui.open && target.dev) { bus.emit('inspect', target.dev); } }
@@ -114,13 +128,14 @@ addEventListener('keydown', e => {
   if (k === 'escape') { if (ui.open) closeOverlay(); return; }
   if (ui.open && ui.open !== 'phone') { if (k === 'c' && ui.open === 'cctv') closeOverlay(); if (k === 'h' && ui.open === 'help') closeOverlay(); if (k === 'x') arm('disarmed', 'shortcut'); return; }
   keys.add(k);
+  if (!locked() && !isTouch && MOVE_KEYS.has(k)) lock();          // walking again captures the mouse again
   if (k === 'e') interact(); if (k === 'q') inspect(); if (k === 'c') toggle('cctv'); if (k === 'h') toggle('help');
   if (k === 'x' && (home.security.alarm || home.security.mode !== 'disarmed')) arm('disarmed', 'shortcut');
   if (k === 'm') { muted = !muted; audio.setMaster(muted ? 0 : 0.8); notify(muted ? 'Sound muted' : 'Sound on'); }
 });
 addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
-addEventListener('blur', () => keys.clear());
-let drag = null;
+addEventListener('blur', () => keys.clear()); document.addEventListener('mouseleave', () => { mouse.inside = false; });
+let drag = null; const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', 'e', 'q']);
 canvas.addEventListener('mousedown', e => {
   if (!started || photoOn || (ui.open && ui.open !== 'phone')) return;
   if (!locked()) { lock(); drag = { x: e.clientX, y: e.clientY, moved: false }; return; }
@@ -131,7 +146,9 @@ addEventListener('mouseup', e => { if (drag && !drag.moved && !locked() && e.but
 addEventListener('mousemove', e => {
   if (!started || (ui.open && ui.open !== 'phone')) return;
   let dx = 0, dy = 0;
+  mouse.x = e.clientX / innerWidth; mouse.inside = e.target === canvas;
   if (locked()) { dx = e.movementX; dy = e.movementY; }
+  else if (!drag && freeLook && !ui.open && e.target === canvas) { dx = e.movementX || 0; dy = e.movementY || 0; canvas.style.cursor = 'none'; }
   else if (drag) { dx = e.clientX - drag.x; dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true; dx *= 1.6; dy *= 1.6; }
   player.yaw -= dx * 0.0022; player.pitch = clamp(player.pitch - dy * 0.0022, -1.45, 1.45);
 });
@@ -168,6 +185,7 @@ function move(dt) {
     if (keys.has('d')) s += 1; if (keys.has('a')) s -= 1;
     if (keys.has('arrowleft')) player.yaw += dt * 1.9; if (keys.has('arrowright')) player.yaw -= dt * 1.9;
     f -= stick.y; s += stick.x;
+    if (freeLook && !locked() && !ui.open && mouse.inside && !drag) { const edge = mouse.x < 0.06 ? (0.06 - mouse.x) / 0.06 : mouse.x > 0.94 ? -(mouse.x - 0.94) / 0.06 : 0; player.yaw += edge * dt * 2.2; }
   }
   const l = Math.hypot(f, s); if (l > 1) { f /= l; s /= l; }
   const sp = keys.has('shift') ? 4.6 : 2.5, sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
@@ -345,7 +363,7 @@ async function enterSim() {
 }
 function exitSim() {
   if (!started) return;
-  if (photoOn) photo(); started = false; cancelAnimationFrame(raf); keys.clear(); stick.x = stick.y = 0; closeOverlay(false); document.exitPointerLock?.();
+  if (photoOn) photo(); started = false; freeLook = false; canvas.style.cursor = ''; cancelAnimationFrame(raf); keys.clear(); stick.x = stick.y = 0; closeOverlay(false); document.exitPointerLock?.();
   audio.setMusic(0, false); audio.siren(false);
   if (isTouch) goLandscape(false); showSim(false);
 }
@@ -362,6 +380,6 @@ setInterval(() => {
 
 
 // handy for demos and automated tests
-window.SIM = { view, get renderer() { return renderer; }, stats: () => { renderer.info.autoReset = false; renderer.info.reset(); render(); const r = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length }; renderer.info.autoReset = true; return r; }, toggle, home, set, dev, player, runScene, arm, bus, ui, camera, scene, photo, enterSim, exitSim, get pt() { return pt; }, get started() { return started; } };
+window.SIM = { get freeLook() { return freeLook; }, view, get renderer() { return renderer; }, stats: () => { renderer.info.autoReset = false; renderer.info.reset(); render(); const r = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, programs: renderer.info.programs.length }; renderer.info.autoReset = true; return r; }, toggle, home, set, dev, player, runScene, arm, bus, ui, camera, scene, photo, enterSim, exitSim, get pt() { return pt; }, get started() { return started; } };
 if (window.DH) Object.assign(window.DH, { enter: enterSim, exit: exitSim, applyQuality: q => { ui.quality = q; if (gfx) applyQuality(q); }, focusCategory, bus, home, ui });
 try { boot(); window.DH?.onReady?.(); } catch (e) { console.error(e); window.DH?.onError?.(e); }
