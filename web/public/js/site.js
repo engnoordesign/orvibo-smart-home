@@ -5,7 +5,18 @@ import { sprite, icon } from './icons.js';
 import { loadContent } from './store.js';
 import { UI, DEFAULT_CONTENT } from './content.js';
 import { makePhoto, makeCRIPhoto, fixtureHasColour, TV_CHANNELS } from './photo.js';
-import { deviceArt, artKey, lockArt } from './devices.js';
+import { deviceArt, artKey } from './devices.js';
+
+// the official ORVIBO product photos used as live devices: where the screen and the keys are on each photo (in %)
+const REAL = {
+  mp: { x: { src: 'img/products/mixpad12.webp', scr: [10.8, 7, 78.4, 57], n: 10 }, '7': { src: 'img/products/mixpad7.webp', scr: [11.1, 5.8, 78, 63.2], n: 8 }, mini: { src: 'img/products/mixpad4.webp', scr: [13.9, 5.6, 70.8, 71.2], n: 4 } },
+  // the inside face of the lock, seen from the hallway in the photo (the V5 has a video screen on this side)
+  inside: { face: { src: 'img/products/lock-v5-in.webp', name: 'ORVIBO V5', scr: [4.5, 2.6, 55.5, 24] }, finger: { src: 'img/products/lock-c1-in.webp', name: 'ORVIBO C1' } },
+  // the outside face with its real keypad, used as the touch keypad
+  pad: { face: { src: 'img/products/lock-v5-pad.webp', cols: [33.3, 56, 78.8], rows: [55, 66, 77.2, 88.2], k: 20, extra: [['fp', 56, 18, 'fp'], ['bell', 56, 43.5, 'bell']] },
+    finger: { src: 'img/products/lock-c1-pad.webp', cols: [16.4, 27.9, 37.3], rows: [9.5, 19.3, 28.4, 38.4], k: 8.5, extra: [['card', 27.9, 53.1, 'card'], ['fp', 36.5, 88.4, 'fp']] } },
+};
+const realLock = m => { const r = REAL.inside[m] || REAL.inside.face; return `<span class="lkwrap"><img class="lockimg" src="${r.src}" alt="${r.name}" draggable="false">${r.scr ? `<span class="lkscr" style="left:${r.scr[0]}%;top:${r.scr[1]}%;width:${r.scr[2]}%;height:${r.scr[3]}%"></span>` : ''}</span>`; };
 
 let C = null, LANG = 'ar';
 try { LANG = localStorage.getItem('dh-lang') || 'ar'; } catch (e) { /* storage blocked */ }
@@ -191,8 +202,8 @@ function mpScreen() {
   const dev = [...r.fixtures().map(f => tile('l:' + f, FIX_ICON[f], fixName(f), st[f].on ? st[f].bri + '%' : L('مطفأ', 'Off'), st[f].on)), cur,
     r.has('tv') ? tile('tv', 'tv', L('التلفزيون', 'TV'), st.tv.on ? (LANG === 'ar' ? TV_CHANNELS[st.tv.ch].ar : TV_CHANNELS[st.tv.ch].en) : L('مطفأ', 'Off'), st.tv.on) : null,
     r.has('tv') && st.tv.on ? tile('ch', 'film', L('القناة التالية', 'Next channel'), '', false) : null].filter(Boolean);
-  const tiles = model === 'mini' ? [sc[0], sc[2], ...dev].slice(0, 4) : model === '7' ? [...sc, ...dev].slice(0, 8) : [...sc, ...dev].slice(0, 12);
-  return `<div class="device m-${esc(model)}"><div class="glass"><div class="mpscreen"><div class="mphead"><b class="num">${fmtT(st.time)}</b><span>${L('غرفة النوم', 'Bedroom')} · ${st.temp.toFixed(0)}°</span></div><div class="mpgrid">${tiles.join('')}</div></div></div></div>`;
+  const real = REAL.mp[model] || REAL.mp.x, q = real.scr, tiles = model === 'mini' ? [sc[0], sc[2], ...dev].slice(0, 4) : [...sc, ...dev].slice(0, real.n);
+  return `<div class="mpreal m-${esc(model)}"><img src="${real.src}" alt="${esc(tx(mpProd()?.name))}" draggable="false"><div class="mpscr" style="left:${q[0]}%;top:${q[1]}%;width:${q[2]}%;height:${q[3]}%"><div class="mpscreen"><div class="mphead"><b class="num">${fmtT(st.time)}</b><span>${L('غرفة النوم', 'Bedroom')} · ${st.temp.toFixed(0)}°</span></div><div class="mpgrid">${tiles.join('')}</div></div></div></div>`;
 }
 function dockMixpad() {
   const host = $('#dk-mixpad'); if (!host) return;
@@ -221,23 +232,28 @@ function lockProd() { const ps = prods('lock'); return ps.find(p => p.id === S.l
 const lockModel = () => (lockProd()?.model === 'finger' ? 'finger' : 'face');
 function mountLock() {
   const p = lockProd(); if (p) S.lock.sel = p.id;
-  R.lock = makePhoto($('#st-lock'), { scene: { ...sceneOf('lock'), flat: true }, label: L('باب المدخل مع القفل الذكي', 'Front door with the smart lock'), lockArt: () => lockArt(lockModel()) });
+  R.lock = makePhoto($('#st-lock'), { scene: { ...sceneOf('lock'), flat: true }, label: L('باب المدخل مع القفل الذكي', 'Front door with the smart lock'), lockArt: () => realLock(lockModel()) });
   R.lock.ready.then(() => { intercom(); R.lock.door(!S.lock.locked); });
   cap($('#st-lock'), L('باب المدخل', 'Front door'));
   dockLock(); panelLock();
 }
 function intercom() {
-  if (!R.lock) return; const out = sceneOf('lock').outside;
-  R.lock.panel(S.lock.guest ? `<div class="icam" style="background-image:url('${esc(out)}')"><i class="who"></i><em>●</em></div>` : `<div class="wallmp"><b>${fmtT(new Date().getHours() + new Date().getMinutes() / 60)}</b><span>${S.lock.locked ? '🔒' : '🔓'}</span></div>`);
+  if (!R.lock) return; const out = sceneOf('lock').outside, cam = `<div class="icam" style="background-image:url('${esc(out)}')"><i class="who"></i><em>●</em></div>`, t = fmtT(new Date().getHours() + new Date().getMinutes() / 60);
+  R.lock.panel(S.lock.guest ? cam : `<div class="wallmp"><b>${t}</b><span>${S.lock.locked ? '🔒' : '🔓'}</span></div>`);
+  const scr = R.lock.lock()?.querySelector('.lkscr');
+  if (scr) scr.innerHTML = S.lock.guest ? cam : !S.lock.locked ? `<div class="lkmsg ok">✓<small>${L('أهلاً', 'Welcome')}</small></div>` : `<div class="lkmsg"><small>${t}</small></div>`;
 }
 const lockFx = (cls, ms = 1200) => { const el = R.lock?.lock(); if (!el) return; el.classList.add(cls); clearTimeout(el['t' + cls]); el['t' + cls] = setTimeout(() => el.classList.remove(cls), ms); };
 const now = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 function lockLog(ar, en) { S.lock.log.unshift({ t: now(), ar, en }); S.lock.log = S.lock.log.slice(0, 12); }
 function dockLock() {
-  const s = S.lock, host = $('#dk-lock'); if (!host) return; const face = lockModel() === 'face';
-  host.innerHTML = `<div class="lockdock"><div class="lockpad">${face ? '<span class="camdot" title="3D face camera"></span>' : ''}<div class="pinview num" aria-live="polite">${'●'.repeat(s.pin.length) || '&nbsp;'}</div>
-      <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '⌫', 0, '✓'].map(k => `<button data-a="lk" data-v="${k === '⌫' ? 'del' : k === '✓' ? 'ok' : k}" aria-label="${k}">${k}</button>`).join('')}</div>
-      <button class="fp" data-a="lk" data-v="fp" aria-label="${L('البصمة', 'Fingerprint')}">${icon('fp')}</button></div>
+  const s = S.lock, host = $('#dk-lock'); if (!host) return; const m = lockModel(), face = m === 'face', P = REAL.pad[m];
+  const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'del', '0', 'ok'], LBL = { del: '⌫', ok: '✓' };
+  host.innerHTML = `<div class="lockdock"><div class="padcol"><div class="pinview num" aria-live="polite">${'●'.repeat(s.pin.length) || '&nbsp;'}</div>
+      <div class="lockpad2 m-${m}"><img src="${P.src}" alt="${esc(tx(lockProd()?.name))}" draggable="false">
+        ${KEYS.map((k, i) => `<button class="k" style="left:${P.cols[i % 3]}%;top:${P.rows[i / 3 | 0]}%;width:${P.k}%" data-a="lk" data-v="${k}" aria-label="${LBL[k] || k}"></button>`).join('')}
+        ${P.extra.map(([v, x, y, n]) => `<button class="k big" style="left:${x}%;top:${y}%;width:${P.k * 1.5}%" data-a="lk" data-v="${v}" aria-label="${n}"></button>`).join('')}</div>
+      <small class="desc">${L('اضغط على أزرار القفل نفسه', 'Press the keys on the lock itself')}</small></div>
     <div class="ctl"><div class="chips"><button class="chip" data-a="lk" data-v="fp">${L('بصمة مسجّلة', 'Registered finger')}</button>${face ? `<button class="chip" data-a="lk" data-v="face">${L('الوجه', 'Face')}</button>` : ''}<button class="chip" data-a="lk" data-v="card">${L('البطاقة', 'Card')}</button><button class="chip" data-a="lk" data-v="bad">${L('بصمة غريبة', 'Unknown finger')}</button></div>
       <div class="chips"><button class="chip" data-a="lk" data-v="bell">${icon('bell')} ${L('زائر يرن الجرس', 'Visitor rings')}</button><button class="chip" data-a="lk" data-v="remote">${icon('phone')} ${L('افتح من الهاتف', 'Open from phone')}</button><button class="chip" data-a="lk" data-v="otp">${icon('key')} ${L('رمز لمرة واحدة', 'One-time code')}</button><button class="chip" data-a="lk" data-v="lock">${icon('lock')} ${L('اقفل الآن', 'Lock now')}</button></div>
       <p class="desc">${L('الرمز التجريبي', 'Demo code')}: <b class="num">${PIN}</b>${s.otp ? ` · ${L('رمز الزائر', 'Visitor code')}: <b class="num">${s.otp}</b>` : ''}</p></div></div>`;
@@ -273,6 +289,7 @@ function lockAct(v) {
   if (v === 'otp') { s.otp = String(100000 + Math.floor(Math.random() * 900000)); lockLog('أُنشئ رمز زائر لمرة واحدة', 'One-time visitor code created'); }
   if (v === 'lock') { clearTimeout(doorTimer); d.door(false); s.locked = true; lockLog('أُقفل من الهاتف', 'Locked from the phone'); intercom(); }
   dockLock(); panelLock(); panelRemote();
+  const kb = document.querySelector(`.lockpad2 [data-v="${v}"]`); if (kb) { kb.classList.add('hit'); setTimeout(() => kb.classList.remove('hit'), 450); }
 }
 
 // ---------- curtains ----------
@@ -404,7 +421,7 @@ const ACT = {
   lday: v => { R.light.set({ time: +v }); keep('light', R.light); dockLight(); },
   lsolo: () => { S.light.solo = !S.light.solo; R.light.set({ solo: S.light.solo ? lfix() : null }); keep('light', R.light); dockLight(); },
   mpsel: v => { S.mixpad.sel = v; dockMixpad(); panelMixpad(); }, mp: v => mpAct(v),
-  lksel: v => { S.lock.sel = v; const el = R.lock?.lock(); if (el) el.innerHTML = lockArt(lockModel()); dockLock(); panelLock(); }, lk: v => lockAct(v),
+  lksel: v => { S.lock.sel = v; const el = R.lock?.lock(); if (el) el.innerHTML = realLock(lockModel()); intercom(); dockLock(); panelLock(); }, lk: v => lockAct(v),
   cact: v => curAct(v), csheer: () => { R.curtain.set({ sheer: R.curtain.st.sheer > 50 ? 0 : 100 }); keep('curtain', R.curtain); dockCurtain(); }, cauto: v => curAuto(v),
   clights: () => { const r = R.curtain, on = !r.fixtures().some(f => r.st[f].on); r.fixtures().forEach(f => r.set({ [f]: { on } })); keep('curtain', r); dockCurtain(); },
   acpow: () => clAct('acpow'), acset: v => clAct('acset', v), acmode: v => clAct('acmode', v), acfan: v => clAct('acfan', v), acswing: () => clAct('acswing'),

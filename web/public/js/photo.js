@@ -264,11 +264,11 @@ export function makePhoto(host, opts = {}) {
     let html = '';
     const door = zones.find(z => z.t === 'door'), lock = zones.find(z => z.t === 'lock');
     if (door && img) {
-      const [x, y, w, h] = door.p, inLock = lock ? `<div class="ph-lock" style="left:${(lock.p[0] - x) / w * 100}%;top:${(lock.p[1] - y) / h * 100}%;width:${lock.p[2] / w * 100}%;height:${lock.p[3] / h * 100}%">${opts.lockArt ? opts.lockArt() : ''}</div>` : '';
+      const [x, y, w, h] = door.p, pt = lock && lock.patch, patch = pt ? `<i class="ph-patch" style="left:${(pt[0] - x) / w * 100}%;top:${(pt[1] - y) / h * 100}%;width:${pt[2] / w * 100}%;height:${pt[3] / h * 100}%;background-image:url('${img.src}');background-size:${100 / pt[2] * 100}% ${100 / pt[3] * 100}%;background-position:${(pt[0] + pt[4]) / (100 - pt[2]) * 100}% ${pt[1] / (100 - pt[3]) * 100}%"></i>` : '', inLock = lock ? `<div class="ph-lock" style="left:${(lock.p[0] - x) / w * 100}%;top:${(lock.p[1] - y) / h * 100}%;width:${lock.p[2] / w * 100}%;height:${lock.p[3] / h * 100}%">${opts.lockArt ? opts.lockArt() : ''}</div>` : '';
       html += `<div class="ph-door ${door.hinge === 'l' ? 'hl' : ''}" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%"><div class="ph-out" style="${scene.outside ? `background-image:url('${scene.outside}')` : ''}"></div>
-        <div class="ph-leaf" style="background-image:url('${img.src}');background-size:${100 / w * 100}% ${100 / h * 100}%;background-position:${x / Math.max(0.01, 100 - w) * 100}% ${y / Math.max(0.01, 100 - h) * 100}%"><i class="ph-shade"></i>${inLock}</div></div>`;
+        <div class="ph-leaf" style="background-image:url('${img.src}');background-size:${100 / w * 100}% ${100 / h * 100}%;background-position:${x / Math.max(0.01, 100 - w) * 100}% ${y / Math.max(0.01, 100 - h) * 100}%"><i class="ph-shade"></i>${patch}${inLock}</div></div>`;
     } else if (lock) html += `<div class="ph-lock" style="left:${lock.p[0]}%;top:${lock.p[1]}%;width:${lock.p[2]}%;height:${lock.p[3]}%">${opts.lockArt ? opts.lockArt() : ''}</div>`;
-    zones.filter(z => z.t === 'panel').forEach((z, i) => { html += `<div class="ph-panel" data-pi="${i}" style="left:${z.p[0]}%;top:${z.p[1]}%;width:${z.p[2]}%;height:${z.p[3]}%"><div class="ph-scr"></div></div>`; });
+    zones.filter(z => z.t === 'panel').forEach((z, i) => { html += `<div class="ph-panel" data-pi="${i}" style="left:${z.p[0]}%;top:${z.p[1]}%;width:${z.p[2]}%;height:${z.p[3]}%"><img src="${opts.panelImg || 'img/products/mixpad4-wall.webp'}" alt="MixPad" draggable="false"><div class="ph-scr"></div></div>`; });
     // tap targets
     const seen = new Set();
     zones.forEach(z => {

@@ -236,7 +236,7 @@ const ACT = {
   mv: (v, el) => { const arr = getP(el.dataset.p), i = +el.dataset.i, j = i + +el.dataset.d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; markDirty(); render(); },
   askdel: (v, el) => { pendingDel = el.dataset.p + ':' + el.dataset.i; render(); setTimeout(() => { if (pendingDel === el.dataset.p + ':' + el.dataset.i) { pendingDel = null; render(); } }, 4000); },
   del: (v, el) => { getP(el.dataset.p).splice(+el.dataset.i, 1); pendingDel = null; markDirty(); render(); },
-  rmimg: (v, el) => { setP(el.dataset.p, ''); markDirty(); render(); },
+  rmimg: (v, el) => { setP(el.dataset.p, ''); if (el.dataset.p.endsWith('.img')) setP(el.dataset.p.replace(/\.img$/, '.imgOff'), true); markDirty(); render(); },
   imgdel: (v, el) => { getP(el.dataset.p).splice(+el.dataset.i, 1); markDirty(); render(); },
   imgmv: (v, el) => { const a = getP(el.dataset.p), i = +el.dataset.i; [a[i - 1], a[i]] = [a[i], a[i - 1]]; markDirty(); render(); },
   export: () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(C, null, 1)], { type: 'application/json' })); a.download = 'digital-home-content.json'; document.body.appendChild(a); a.click(); a.remove(); },
@@ -261,7 +261,7 @@ document.addEventListener('change', async e => {
   if (t.dataset?.up) {
     const path = t.dataset.up, files = [...t.files]; if (!files.length) return;
     toast(L('جارٍ رفع الصور…', 'Uploading…'));
-    try { for (const f of files) { const url = await uploadImage(f); if (path.endsWith('.images')) getP(path).push(url); else setP(path, url); } markDirty(); render(); toast(L('تم الرفع — لا تنسَ «حفظ»', 'Uploaded — remember to Save')); }
+    try { for (const f of files) { const url = await uploadImage(f); if (path.endsWith('.images')) getP(path).push(url); else { setP(path, url); if (/^products\.\d+\.img$/.test(path)) setP(path.replace(/\.img$/, '.imgOff'), false); } } markDirty(); render(); toast(L('تم الرفع — لا تنسَ «حفظ»', 'Uploaded — remember to Save')); }
     catch (err) { toast(L('تعذّر رفع الصورة: ', 'Upload failed: ') + err.message); }
     return;
   }
