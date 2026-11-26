@@ -1,0 +1,12 @@
+// Digital Home website on Cloudflare Workers.
+// The site in public/ is served as static files; src/worker.js answers /api/* (content, photos, admin sign-in).
+// The KV namespace CONTENT is created automatically on the first deploy.
+// Set two secrets once, in the dashboard (Worker → Settings → Variables and Secrets) or with
+//   npx wrangler secret put ADMIN_USER   and   npx wrangler secret put ADMIN_PASSWORD
+{
+  "name": "digital-home-site",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "kv_namespaces": [{ "binding": "CONTENT" }]
+}

@@ -25,6 +25,12 @@ python3 -m http.server 8080
 Then open `http://localhost:8080`. To publish it, enable **GitHub Pages** for the repository
 (Settings → Pages → deploy from the `main` branch, root folder).
 
+## Company website and admin panel (`web/`)
+
+The `web/` folder holds the Digital Home company website with live product scenes, the ORVIBO
+colour-quality comparison, projects, and a separate admin panel with sign-in. It deploys as its own
+Cloudflare Worker — see [web/README.md](web/README.md).
+
 ## Publish on Cloudflare Workers
 
 The repository includes `wrangler.jsonc`, so it deploys as a static-assets Worker with no changes.
