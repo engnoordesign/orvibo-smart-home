@@ -124,6 +124,41 @@ function drawTV(c, ch, x, y, w, h, t, out, guest) {
   c.restore();
 }
 
+// ---------- perspective: every window, TV, AC or screen may be a 4-corner shape that follows the photo ----------
+// z.q = [x1,y1, x2,y2, x3,y3, x4,y4] (top-left, top-right, bottom-right, bottom-left, in %); otherwise the box z.p
+export const quadOf = z => (Array.isArray(z.q) && z.q.length === 8) ? z.q : [z.p[0], z.p[1], z.p[0] + z.p[2], z.p[1], z.p[0] + z.p[2], z.p[1] + z.p[3], z.p[0], z.p[1] + z.p[3]];
+// maps (u,v) in the unit square onto the quad (a projective map, so far things shrink as in the photo)
+export function homography(q) {
+  const [x0, y0, x1, y1, x2, y2, x3, y3] = q, dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3, dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  let a, b, c = x0, d, e, f = y0, g = 0, h = 0;
+  const den = dx1 * dy2 - dx2 * dy1;
+  if (Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9 || Math.abs(den) < 1e-12) { a = x1 - x0; b = x3 - x0; d = y1 - y0; e = y3 - y0; }
+  else { g = (dx3 * dy2 - dx2 * dy3) / den; h = (dx1 * dy3 - dx3 * dy1) / den; a = x1 - x0 + g * x1; b = x3 - x0 + h * x3; d = y1 - y0 + g * y1; e = y3 - y0 + h * y3; }
+  return (u, v) => { const w = g * u + h * v + 1; return [(a * u + b * v + c) / w, (d * u + e * v + f) / w]; };
+}
+const pxQuad = (z, W, H) => quadOf(z).map((v, i) => v / 100 * (i % 2 ? H : W));
+// draw a flat picture (canvas) onto the quad: thin strips, each split into two exactly-mapped triangles,
+// so the edges stay straight along the perspective lines with no steps
+function tri(c, tex, s0, s1, s2, d0, d1, d2) {
+  const den = (s1[0] - s0[0]) * (s2[1] - s0[1]) - (s2[0] - s0[0]) * (s1[1] - s0[1]); if (!den) return;
+  const a = ((d1[0] - d0[0]) * (s2[1] - s0[1]) - (d2[0] - d0[0]) * (s1[1] - s0[1])) / den, b = ((d1[1] - d0[1]) * (s2[1] - s0[1]) - (d2[1] - d0[1]) * (s1[1] - s0[1])) / den;
+  const cc = ((d2[0] - d0[0]) * (s1[0] - s0[0]) - (d1[0] - d0[0]) * (s2[0] - s0[0])) / den, d = ((d2[1] - d0[1]) * (s1[0] - s0[0]) - (d1[1] - d0[1]) * (s2[0] - s0[0])) / den;
+  const e = d0[0] - a * s0[0] - cc * s0[1], f = d0[1] - b * s0[0] - d * s0[1];
+  // grow the triangle a hair so neighbours overlap instead of leaving a seam
+  const mx = (d0[0] + d1[0] + d2[0]) / 3, my = (d0[1] + d1[1] + d2[1]) / 3, g = p => { const dx = p[0] - mx, dy = p[1] - my, l = Math.hypot(dx, dy) || 1; return [p[0] + dx / l * 0.7, p[1] + dy / l * 0.7]; };
+  c.save(); c.beginPath(); c.moveTo(...g(d0)); c.lineTo(...g(d1)); c.lineTo(...g(d2)); c.closePath(); c.clip();
+  c.setTransform(a, b, cc, d, e, f); c.drawImage(tex, 0, 0); c.restore();
+}
+function drawOnQuad(c, tex, Hm, n = 40) {
+  const tw = tex.width, th = tex.height, rows = 4;
+  for (let i = 0; i < n; i++) for (let r = 0; r < rows; r++) {
+    const u0 = i / n, u1 = (i + 1) / n, v0 = r / rows, v1 = (r + 1) / rows;
+    const A = Hm(u0, v0), B = Hm(u1, v0), C2 = Hm(u1, v1), D = Hm(u0, v1), sA = [u0 * tw, v0 * th], sB = [u1 * tw, v0 * th], sC = [u1 * tw, v1 * th], sD = [u0 * tw, v1 * th];
+    tri(c, tex, sA, sB, sD, A, B, D); tri(c, tex, sB, sC, sD, B, C2, D);
+  }
+}
+const polyPath = (c, pts, W, H) => { c.beginPath(); for (let i = 0; i < pts.length; i += 2) c[i ? 'lineTo' : 'moveTo'](pts[i] / 100 * W, pts[i + 1] / 100 * H); c.closePath(); };
+
 // ---------- curtains: pleated fabric that bunches up as it opens ----------
 const rnd = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 let NOISE = null;
@@ -132,7 +167,7 @@ function noise() {
   for (let i = 0; i < 96 * 96; i++) { const v = 128 + (Math.random() - 0.5) * 36 + Math.sin(i % 96 * 0.9) * 6; d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v; d.data[i * 4 + 3] = 255; }
   c.putImageData(d, 0, 0); NOISE = cv; return cv;
 }
-function fabric(c, x, y, w, h, col, folds, alpha, sheer, seed, edge) {
+function fabric(c, x, y, w, h, col, folds, alpha, sheer, seed, edge, sway = 0) {
   if (w < 1 || h < 1) return;
   const n = Math.max(2, Math.round(folds)), wave = Math.min(h * 0.012, w / n * 0.25);
   c.save();
@@ -145,7 +180,7 @@ function fabric(c, x, y, w, h, col, folds, alpha, sheer, seed, edge) {
   let acc = 0; const ws = Array.from({ length: n }, (_, i) => 0.75 + rnd(seed * 7 + i) * 0.5), tot = ws.reduce((a, b) => a + b, 0);
   for (let i = 0; i < n; i++) {
     const a0 = acc / tot, span = ws[i] / tot; acc += ws[i];
-    for (let k = 0; k <= 6; k++) { const u = k / 6, sh = lo + (hi - lo) * (0.5 - 0.5 * Math.cos(u * Math.PI * 2)) * (0.8 + rnd(seed + i * 3) * 0.2); g.addColorStop(Math.min(1, a0 + span * u), css(col.map(v => Math.min(255, v * sh)), alpha)); }
+    for (let k = 0; k <= 6; k++) { const u = k / 6, sh = lo + (hi - lo) * (0.5 - 0.5 * Math.cos(u * Math.PI * 2 + sway * Math.sin(i * 1.7 + seed))) * (0.8 + rnd(seed + i * 3) * 0.2); g.addColorStop(Math.min(1, a0 + span * u), css(col.map(v => Math.min(255, v * sh)), alpha)); }
   }
   c.fillStyle = g; c.fillRect(x, y, w, h + wave * 2);
   if (!sheer) { c.globalAlpha = 0.18; c.globalCompositeOperation = 'overlay'; c.fillStyle = c.createPattern(noise(), 'repeat'); c.fillRect(x, y, w, h + wave * 2); c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; }
@@ -157,32 +192,51 @@ function fabric(c, x, y, w, h, col, folds, alpha, sheer, seed, edge) {
   c.restore();
   if (!sheer) { c.fillStyle = 'rgba(40,40,44,.55)'; c.fillRect(x, y - Math.max(1.5, h * 0.006), w, Math.max(1.5, h * 0.006)); }
 }
-function drawWindow(c, z, W, H, cur, she) {
-  const [px, py, pw, ph] = z.p, x = px / 100 * W, y = py / 100 * H, w = pw / 100 * W, h = ph / 100 * H, col = hexRGB(z.c) || [120, 112, 104], m = z.m || 'split';
-  const nf = Math.max(4, Math.round(w / (W * 0.022)));
-  if (z.sheer && she > 0.01) { const sw = Math.max(w * 0.05, (w / 2) * she); fabric(c, x, y, sw, h, [244, 241, 234], nf * 0.8, 0.6, true, 3, 1); fabric(c, x + w - sw, y, sw, h, [244, 241, 234], nf * 0.8, 0.6, true, 4, -1); }
-  if (cur <= 0.005) return;
-  if (m === 'blind') { const bh = h * cur, g = c.createLinearGradient(0, y, 0, y + bh); g.addColorStop(0, css(col.map(v => v * 0.85))); g.addColorStop(1, css(col)); c.fillStyle = g; c.fillRect(x, y, w, bh);
-    c.fillStyle = 'rgba(0,0,0,.06)'; for (let yy = y + 6; yy < y + bh; yy += Math.max(4, h / 26)) c.fillRect(x, yy, w, 1); c.fillStyle = css(col.map(v => v * 0.55)); c.fillRect(x - 1, y + bh - Math.max(2, h * 0.02), w + 2, Math.max(2, h * 0.02)); return; }
-  // a curtain never folds flatter than about 12% of its width
-  if (m === 'left' || m === 'right') { const pw2 = w * (0.1 + 0.9 * cur); fabric(c, m === 'left' ? x : x + w - pw2, y, pw2, h, col, nf, 0.98, false, 1, m === 'left' ? 1 : -1); return; }
-  const half = (w / 2) * (0.12 + 0.88 * cur), k = 0.98 * Math.min(1, cur * 6);
-  fabric(c, x, y, half, h, col, nf / 2, k, false, 1, 1); fabric(c, x + w - half, y, half, h, col, nf / 2, k, false, 2, -1);
+const TEX = new WeakMap();
+function texFor(z, w, h) { let t = TEX.get(z); if (!t) { t = document.createElement('canvas'); TEX.set(z, t); } if (t.width !== w || t.height !== h) { t.width = w; t.height = h; } const c = t.getContext('2d'); c.clearRect(0, 0, w, h); return [t, c]; }
+let LAYER = null;
+function layer(W, H) { if (!LAYER) LAYER = document.createElement('canvas'); if (LAYER.width !== W || LAYER.height !== H) { LAYER.width = W; LAYER.height = H; } const c = LAYER.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H); return c; }
+function drawWindow(c, z, W, H, cur, she, sway) {
+  if (cur <= 0.004 && !(z.sheer && she > 0.004)) return;
+  const q = pxQuad(z, W, H), Hm = homography(q), col = hexRGB(z.c) || [120, 112, 104], m = z.m || 'split';
+  // flat size of the window (its longest edges)
+  const w = Math.max(8, Math.round(Math.max(Math.hypot(q[2] - q[0], q[3] - q[1]), Math.hypot(q[4] - q[6], q[5] - q[7])))), h = Math.max(8, Math.round(Math.max(Math.hypot(q[6] - q[0], q[7] - q[1]), Math.hypot(q[4] - q[2], q[5] - q[3]))));
+  const [tex, t] = texFor(z, Math.min(1400, w), Math.min(1400, h)), tw = tex.width, th = tex.height;
+  const nf = Math.max(4, Math.round(tw / 26));
+  if (z.sheer && she > 0.01) { const sw = Math.max(tw * 0.05, (tw / 2) * she); fabric(t, 0, 0, sw, th, [244, 241, 234], nf * 0.8, 0.6, true, 3, 1, sway); fabric(t, tw - sw, 0, sw, th, [244, 241, 234], nf * 0.8, 0.6, true, 4, -1, sway); }
+  if (cur > 0.004) {
+    if (m === 'blind') { const bh = th * cur, g = t.createLinearGradient(0, 0, 0, bh); g.addColorStop(0, css(col.map(v => v * 0.82))); g.addColorStop(1, css(col)); t.fillStyle = g; t.fillRect(0, 0, tw, bh);
+      t.fillStyle = 'rgba(0,0,0,.05)'; for (let yy = 6; yy < bh; yy += Math.max(4, th / 26)) t.fillRect(0, yy, tw, 1); t.fillStyle = css(col.map(v => v * 0.5)); t.fillRect(0, bh - Math.max(2, th * 0.02), tw, Math.max(2, th * 0.02)); }
+    else if (m === 'left' || m === 'right') { const pw2 = tw * (0.1 + 0.9 * cur); fabric(t, m === 'left' ? 0 : tw - pw2, 0, pw2, th, col, nf, 0.97 * Math.min(1, cur * 6), false, 1, m === 'left' ? 1 : -1, sway); }
+    else { const half = (tw / 2) * (0.12 + 0.88 * cur), k = 0.97 * Math.min(1, cur * 6); fabric(t, 0, 0, half, th, col, nf / 2, k, false, 1, 1, sway); fabric(t, tw - half, 0, half, th, col, nf / 2, k, false, 2, -1, sway); }
+  }
+  // onto the photo, in perspective, and behind whatever stands in front of the window
+  const l = layer(W, H); drawOnQuad(l, tex, Hm, Math.max(24, Math.round(w / 10)));
+  if (Array.isArray(z.cut)) { l.globalCompositeOperation = 'destination-out'; l.filter = `blur(${Math.max(0.6, W / 900)}px)`; for (const poly of z.cut) { polyPath(l, poly, W, H); l.fill(); } l.filter = 'none'; l.globalCompositeOperation = 'source-over'; }
+  c.drawImage(LAYER, 0, 0);
 }
 
 // ---------- AC unit ----------
 const AC_COL = { cool: [140, 205, 255], heat: [255, 165, 100], dry: [150, 235, 220], fan: [225, 232, 240] };
-function drawACFlow(c, z, W, H, ac, t) {
-  const [px, py, pw, ph] = z.p, x = px / 100 * W, y = py / 100 * H, w = pw / 100 * W, h = ph / 100 * H, col = AC_COL[ac.mode] || AC_COL.cool;
-  const len = h * (3 + ac.fan * 1.2), ang = (ac.swing ? Math.sin(t * 0.9) * 0.4 : 0.12) + 0.05;
+function drawACBody(c, z, W, H, k) {
+  // the flap swings open along the bottom of the unit
+  const Hm = homography(pxQuad(z, W, H)), P = (u, v) => Hm(u, v);
+  const quad = (v0, v1, col) => { const a = P(0.05, v0), b = P(0.95, v0), d = P(0.95, v1), e = P(0.05, v1); c.fillStyle = col; c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.lineTo(...d); c.lineTo(...e); c.closePath(); c.fill(); };
+  quad(0.8, 0.8 + 0.11 * k, `rgba(25,28,34,${0.72 * k})`); quad(0.8 + 0.11 * k, 0.8 + 0.15 * k, `rgba(255,255,255,${0.5 * k})`);
+}
+function drawACFlow(c, z, W, H, ac, t, k) {
+  const Hm = homography(pxQuad(z, W, H)), col = AC_COL[ac.mode] || AC_COL.cool, L = Hm(0, 1), R = Hm(1, 1), T = Hm(0, 0);
+  const h = Math.hypot(L[0] - T[0], L[1] - T[1]), len = h * (3 + ac.fan * 1.2), ang = (ac.swing ? Math.sin(t * 0.9) * 0.4 : 0.12) + 0.05;
   c.save(); c.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 26; i++) {
-    const k = ((t * (0.22 + ac.fan * 0.08) + rnd(i)) % 1), sx = x + w * (0.1 + 0.8 * rnd(i + 40)), drift = Math.sin(t * 1.3 + i) * w * 0.03;
-    const px = sx + Math.sin(ang) * len * k + drift, py = y + h * 0.92 + len * k * Math.cos(ang), r = h * (0.35 + 1.6 * k), a = 0.11 * Math.sin(Math.PI * Math.min(1, k * 1.15));
-    const g = c.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, css(col, a)); g.addColorStop(1, css(col, 0)); c.fillStyle = g; c.fillRect(px - r, py - r, r * 2, r * 2);
+  for (let i = 0; i < 44; i++) {
+    const ph = ((t * (0.18 + ac.fan * 0.06) + rnd(i)) % 1), u = 0.06 + 0.88 * rnd(i + 40), base = Hm(u, 0.95), drift = Math.sin(t * 0.9 + i * 1.3) * h * 0.2 * ph;
+    const px = base[0] + Math.sin(ang) * len * ph + drift, py = base[1] + len * ph * Math.cos(ang), r = h * (0.25 + 0.9 * ph), a = 0.05 * k * Math.sin(Math.PI * Math.min(1, ph * 1.05));
+    c.save(); c.translate(px, py); c.rotate(-ang * 0.6); c.scale(0.55, 1.6);
+    const g = c.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, css(col, a)); g.addColorStop(0.55, css(col, a * 0.35)); g.addColorStop(1, css(col, 0)); c.fillStyle = g; c.fillRect(-r, -r, r * 2, r * 2); c.restore();
   }
   c.restore();
-  c.save(); c.fillStyle = css(col); c.shadowColor = css(col); c.shadowBlur = h * 0.25; c.font = `600 ${Math.max(7, h * 0.26)}px system-ui,sans-serif`; c.textAlign = 'center'; c.fillText(String(ac.set) + '°', x + w * 0.83, y + h * 0.55); c.restore();
+  const d = Hm(0.83, 0.52); c.save(); c.globalAlpha = k; c.fillStyle = css(col); c.shadowColor = css(col); c.shadowBlur = h * 0.25; c.font = `600 ${Math.max(7, h * 0.26)}px system-ui,sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(ac.set) + '°', d[0], d[1]); c.restore();
+  void R;
 }
 
 // ============================================================================================
@@ -198,7 +252,8 @@ export function makePhoto(host, opts = {}) {
   const lm = document.createElement('canvas'), lx = lm.getContext('2d');
   const has = t => zones.some(z => z.t === t), hasWin = has('window');
   const lit = FIXTURES.reduce((o, f) => (o[f] = { I: 0, c: [255, 200, 150] }, o), {});
-  let img = null, out = null, masks = [], cur = st.curtain / 100, she = st.sheer / 100, flashC = null, flashT = 0, lastDraw = 0, guestOn = false;
+  let img = null, out = null, masks = [], cur = st.curtain / 100, she = st.sheer / 100, curV = 0, sway = 0, tm = st.time, tvK = st.tv.on ? 1 : 0, acK = st.ac.on ? 1 : 0, chShow = st.tv.ch, chK = 1, flashC = null, flashT = 0, lastDraw = 0, guestOn = false;
+  const tvTex = document.createElement('canvas');
   const tcache = new Map();
 
   const target = f => { const L = st[f]; if (!L || !L.on || (st.solo && st.solo !== f)) return 0; return Math.pow(clamp(L.bri, 1, 100) / 100, 0.8); };
@@ -213,7 +268,7 @@ export function makePhoto(host, opts = {}) {
       html += `<div class="ph-door ${door.hinge === 'l' ? 'hl' : ''}" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%"><div class="ph-out" style="${scene.outside ? `background-image:url('${scene.outside}')` : ''}"></div>
         <div class="ph-leaf" style="background-image:url('${img.src}');background-size:${100 / w * 100}% ${100 / h * 100}%;background-position:${x / Math.max(0.01, 100 - w) * 100}% ${y / Math.max(0.01, 100 - h) * 100}%"><i class="ph-shade"></i>${inLock}</div></div>`;
     } else if (lock) html += `<div class="ph-lock" style="left:${lock.p[0]}%;top:${lock.p[1]}%;width:${lock.p[2]}%;height:${lock.p[3]}%">${opts.lockArt ? opts.lockArt() : ''}</div>`;
-    zones.filter(z => z.t === 'panel').forEach(z => { html += `<div class="ph-panel" style="left:${z.p[0]}%;top:${z.p[1]}%;width:${z.p[2]}%;height:${z.p[3]}%"><div class="ph-scr"></div></div>`; });
+    zones.filter(z => z.t === 'panel').forEach((z, i) => { html += `<div class="ph-panel" data-pi="${i}" style="left:${z.p[0]}%;top:${z.p[1]}%;width:${z.p[2]}%;height:${z.p[3]}%"><div class="ph-scr"></div></div>`; });
     // tap targets
     const seen = new Set();
     zones.forEach(z => {
@@ -224,16 +279,30 @@ export function makePhoto(host, opts = {}) {
       else [l, t, w, h] = z.p;
       html += `<button class="ph-hot ${seen.has(key) ? 'dup' : ''}" data-hot="${key}" style="left:${l}%;top:${t}%;width:${w}%;height:${h}%" aria-label="${key}"><i></i></button>`; seen.add(key);
     });
-    dom.innerHTML = html;
+    dom.innerHTML = html; skewPanels();
     dom.querySelectorAll('.ph-hot').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); opts.onHot(b.dataset.hot); }));
     if (lastPanel != null) api.panel(lastPanel);
     host.classList.toggle('dooropen', !!doorOpen);
   }
   let lastPanel = null, doorOpen = false;
+  // a CSS matrix3d that lays a box of size w×h onto four points (used for screens on a wall seen at an angle)
+  function skewPanels() {
+    const r = host.getBoundingClientRect(); if (!r.width) return;
+    dom.querySelectorAll('.ph-panel').forEach((el, i) => {
+      const z = zones.filter(q => q.t === 'panel')[i]; if (!z || !z.q) { el.style.transform = ''; return; }
+      const w = z.p[2] / 100 * r.width, h = z.p[3] / 100 * r.height, q = z.q.map((v, k) => v / 100 * (k % 2 ? r.height : r.width) - (k % 2 ? z.p[1] / 100 * r.height : z.p[0] / 100 * r.width));
+      const Hm = homography(q), [x0, y0] = Hm(0, 0), [x1, y1] = Hm(1, 0), [x3, y3] = Hm(0, 1), [x2, y2] = Hm(1, 1);
+      // solve the projective map from the unit square (same formulas as homography), then scale by the box size
+      const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3, dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3, den = dx1 * dy2 - dx2 * dy1 || 1e-9;
+      const g = (dx3 * dy2 - dx2 * dy3) / den, hh = (dx1 * dy3 - dx3 * dy1) / den, a = x1 - x0 + g * x1, b = x3 - x0 + hh * x3, d = y1 - y0 + g * y1, e = y3 - y0 + hh * y3;
+      el.style.transformOrigin = '0 0';
+      el.style.transform = `matrix3d(${a / w},${d / w},0,${g / w},${b / h},${e / h},0,${hh / h},0,0,1,0,${x0},${y0},0,1)`;
+    });
+  }
 
   // ---- light map: what light reaches each part of the room ----
   function lightmap(W, H, t) {
-    const s = sunAt(st.time), warm = clamp((s - 0.1) / 0.6, 0, 1);
+    const s = sunAt(tm), warm = clamp((s - 0.1) / 0.6, 0, 1);
     const block = hasWin ? (1 - 0.86 * cur) * (1 - 0.3 * she) : 1, d = s * block;
     const day = [1, 0.8 + 0.2 * warm, 0.62 + 0.38 * warm];
     const amb = [0.075 + d * day[0] * 0.95, 0.09 + d * day[1] * 0.95, 0.135 + d * day[2] * 0.9];
@@ -246,7 +315,7 @@ export function makePhoto(host, opts = {}) {
     });
     let bounce = [0, 0, 0];
     for (const z of zones) {
-      if (z.t === 'tv' && st.tv.on) { const g0 = TV_CHANNELS[st.tv.ch % TV_CHANNELS.length].glow, fl = 0.85 + 0.15 * Math.sin(t * 3.1) * Math.sin(t * 1.7), cx = (z.p[0] + z.p[2] / 2) / 100 * W, cy = (z.p[1] + z.p[3] / 2) / 100 * H, r = z.p[2] / 100 * W * 2.6;
+      if (z.t === 'tv' && tvK > 0.01) { const g0 = TV_CHANNELS[chShow % TV_CHANNELS.length].glow, fl = tvK * (0.85 + 0.15 * Math.sin(t * 3.1) * Math.sin(t * 1.7)), cx = (z.p[0] + z.p[2] / 2) / 100 * W, cy = (z.p[1] + z.p[3] * 0.8) / 100 * H, r = z.p[2] / 100 * W * 2.8;
         const g = lx.createRadialGradient(cx, cy, 0, cx, cy, r); g.addColorStop(0, css(g0, 0.55 * fl)); g.addColorStop(1, css(g0, 0)); lx.fillStyle = g; lx.fillRect(0, 0, W, H); continue; }
       if (!(z.t === 'light' || z.t === 'line' || z.t === 'area')) continue;
       const L = lit[z.f]; if (!L || L.I < 0.004) continue;
@@ -264,7 +333,7 @@ export function makePhoto(host, opts = {}) {
         continue;
       }
       const px = z.p[0] / 100 * W, py = z.p[1] / 100 * H, a = z.a || [z.p[0], Math.min(98, z.p[1] + (kind === 'wash' || kind === 'lamp' ? 8 : 30))], ax = a[0] / 100 * W, ay = a[1] / 100 * H;
-      const radial = (cx, cy, rx, ry, al) => { lx.save(); lx.translate(cx, cy); lx.scale(1, ry / rx); const g = lx.createRadialGradient(0, 0, 0, 0, 0, rx); g.addColorStop(0, css(c, al)); g.addColorStop(0.45, css(c, al * 0.55)); g.addColorStop(1, css(c, 0)); lx.fillStyle = g; lx.fillRect(-rx, -rx, rx * 2, rx * 2); lx.restore(); };
+      const radial = (cx, cy, rx, ry, al) => { lx.save(); lx.translate(cx, cy); lx.scale(1, ry / rx); const g = lx.createRadialGradient(0, 0, 0, 0, 0, rx); [[0, 1], [0.18, 0.88], [0.36, 0.64], [0.54, 0.38], [0.72, 0.17], [0.88, 0.05], [1, 0]].forEach(([o, k]) => g.addColorStop(o, css(c, al * k))); lx.fillStyle = g; lx.fillRect(-rx, -rx, rx * 2, rx * 2); lx.restore(); };
       const cone = (wTop, wBot, al) => { const dx = ax - px, dy = ay - py, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, g = lx.createLinearGradient(px, py, ax, ay); g.addColorStop(0, css(c, al)); g.addColorStop(1, css(c, al * 0.25));
         lx.fillStyle = g; lx.beginPath(); lx.moveTo(px + nx * wTop, py + ny * wTop); lx.lineTo(ax + nx * wBot, ay + ny * wBot); lx.lineTo(ax - nx * wBot, ay - ny * wBot); lx.lineTo(px - nx * wTop, py - ny * wTop); lx.closePath(); lx.fill(); };
       if (kind === 'pool') { cone(r * 0.2, r * 0.9, (z.h ? 0.05 : 0.08) * I); radial(ax, ay, r * 1.4, r * 0.95, 1.0 * I); radial(px, py, r * 0.6, r * 0.5, 0.35 * I); radial((px + ax) / 2, (py + ay) / 2, r * 2.2, r * 1.8, 0.32 * I); }
@@ -286,8 +355,8 @@ export function makePhoto(host, opts = {}) {
     if (scene.flat) { if (flashC && flashT > 0) { ctx.fillStyle = css(flashC, 0.22 * flashT); ctx.fillRect(0, 0, W, H); } lastDraw = t; return; }
     // objects that sit in the room (lit by the room light)
     for (const z of zones) {
-      if (z.t === 'window') drawWindow(ctx, z, W, H, cur, she);
-      if (z.t === 'ac' && st.ac.on) { const [x, y, w, h] = z.p.map((v, i) => v / 100 * (i % 2 ? H : W)); ctx.fillStyle = 'rgba(25,28,34,.72)'; ctx.fillRect(x + w * 0.05, y + h * 0.8, w * 0.9, h * 0.11); ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(x + w * 0.05, y + h * 0.91, w * 0.9, h * 0.04); }
+      if (z.t === 'window') drawWindow(ctx, z, W, H, cur, she, sway);
+      if (z.t === 'ac' && acK > 0.01) drawACBody(ctx, z, W, H, acK);
       if (z.t === 'area') { const m = masks.find(q => q.z === z); if (m && m.mask && lit[z.f].I < 0.5) { ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = 1 - lit[z.f].I * 2; ctx.drawImage(tinted(m.mask, [150, 150, 156], tcache).full, 0, 0, W, H); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; } }
     }
     // relight
@@ -309,8 +378,15 @@ export function makePhoto(host, opts = {}) {
     }
     ctx.globalCompositeOperation = 'source-over';
     for (const z of zones) {
-      if (z.t === 'tv' && st.tv.on) { const [x, y, w, h] = z.p.map((v, i) => v / 100 * (i % 2 ? H : W)); drawTV(ctx, st.tv.ch % TV_CHANNELS.length, x, y, w, h, t, out, opts.guest ? opts.guest() : false); }
-      if (z.t === 'ac' && st.ac.on) drawACFlow(ctx, z, W, H, st.ac, t);
+      if (z.t === 'tv' && tvK > 0.01) {
+        // the picture is drawn flat, then laid on the screen in perspective; it fades in like a real panel
+        const q = pxQuad(z, W, H), tw = Math.max(32, Math.round(Math.hypot(q[2] - q[0], q[3] - q[1]))), th = Math.max(18, Math.round(Math.hypot(q[6] - q[0], q[7] - q[1])));
+        if (tvTex.width !== tw || tvTex.height !== th) { tvTex.width = tw; tvTex.height = th; }
+        const tc = tvTex.getContext('2d'), gst = opts.guest ? opts.guest() : false; drawTV(tc, chShow % TV_CHANNELS.length, 0, 0, tw, th, t, out, gst);
+        if (chK < 1) { tc.globalAlpha = 1 - chK; tc.fillStyle = '#05070b'; tc.fillRect(0, 0, tw, th); tc.globalAlpha = 1; }
+        ctx.save(); ctx.globalAlpha = Math.pow(tvK, 1.5) * 0.97; drawOnQuad(ctx, tvTex, homography(q), 16); ctx.restore();
+      }
+      if (z.t === 'ac' && acK > 0.01) drawACFlow(ctx, z, W, H, st.ac, t, acK);
     }
     if (flashC && flashT > 0) { ctx.fillStyle = css(flashC, 0.22 * flashT); ctx.fillRect(0, 0, W, H); }
     lastDraw = t;
@@ -321,15 +397,25 @@ export function makePhoto(host, opts = {}) {
     dirty: true,
     tick(dt, t) {
       let moving = false;
-      for (const f of FIXTURES) { const L = lit[f], to = target(f), c = colourOf(f); const k = 1 - Math.exp(-dt * 9);
-        if (Math.abs(L.I - to) > 0.002) { L.I += (to - L.I) * k; moving = true; } else L.I = to;
-        for (let i = 0; i < 3; i++) { if (Math.abs(L.c[i] - c[i]) > 0.6) { L.c[i] += (c[i] - L.c[i]) * k; moving = true; } else L.c[i] = c[i]; } }
-      const ct = st.curtain / 100, sh = st.sheer / 100, sp = dt * 0.32;
-      if (Math.abs(cur - ct) > 0.001) { cur += clamp(ct - cur, -sp, sp); moving = true; }
-      if (Math.abs(she - sh) > 0.001) { she += clamp(sh - she, -sp, sp); moving = true; }
+      const kf = 1 - Math.exp(-dt * 4.2);
+      for (const f of FIXTURES) { const L = lit[f], to = target(f), c = colourOf(f);
+        if (Math.abs(L.I - to) > 0.002) { L.I += (to - L.I) * kf; moving = true; } else L.I = to;
+        for (let i = 0; i < 3; i++) { if (Math.abs(L.c[i] - c[i]) > 0.6) { L.c[i] += (c[i] - L.c[i]) * kf; moving = true; } else L.c[i] = c[i]; } }
+      // the curtain motor accelerates, travels, then slows down before it stops
+      const ct = st.curtain / 100, dist = ct - cur;
+      if (Math.abs(dist) > 0.0015) { const vmax = 0.26, acc = 0.45, want = Math.sign(dist) * Math.min(vmax, Math.sqrt(2 * acc * Math.abs(dist)));
+        curV += clamp(want - curV, -acc * dt, acc * dt); cur += curV * dt; if (Math.sign(ct - cur) !== Math.sign(dist)) { cur = ct; curV = 0; } moving = true; }
+      else { cur = ct; curV = 0; }
+      sway += (Math.abs(curV) * 2.2 - sway) * (1 - Math.exp(-dt * 3)); if (sway > 0.002) moving = true;
+      const sh = st.sheer / 100; if (Math.abs(she - sh) > 0.001) { she += clamp(sh - she, -dt * 0.3, dt * 0.3); moving = true; }
+      if (Math.abs(tm - st.time) > 0.005) { tm += (st.time - tm) * (1 - Math.exp(-dt * 2.6)); moving = true; } else tm = st.time;
+      const tvTo = st.tv.on ? 1 : 0, acTo = st.ac.on ? 1 : 0;
+      if (Math.abs(tvK - tvTo) > 0.004) { tvK += clamp(tvTo - tvK, -dt * 1.6, dt * 1.6); moving = true; } else tvK = tvTo;
+      if (Math.abs(acK - acTo) > 0.004) { acK += clamp(acTo - acK, -dt * 0.9, dt * 0.9); moving = true; } else acK = acTo;
+      if (chShow !== st.tv.ch) { chK -= dt * 5; if (chK <= 0) { chShow = st.tv.ch; chK = 0; } moving = true; } else if (chK < 1) { chK = Math.min(1, chK + dt * 4); moving = true; }
       if (flashT > 0) { flashT = Math.max(0, flashT - dt * 1.6); moving = true; }
       const ext = opts.onTick ? opts.onTick(dt, st) : false;
-      const anim = (st.tv.on && has('tv')) || (st.ac.on && has('ac'));
+      const anim = (tvK > 0.01 && has('tv')) || (acK > 0.01 && has('ac'));
       if (moving || this.dirty || (anim && t - lastDraw > 0.033)) { this.dirty = false; draw(t); }
       return moving || anim || ext || !!opts.alwaysTick || this.dirty;
     },
@@ -340,6 +426,7 @@ export function makePhoto(host, opts = {}) {
     const r = host.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(1, Math.min(1600, Math.round(r.width * dpr))), h = Math.max(1, Math.round(w * (img ? img.naturalHeight / img.naturalWidth : 2 / 3)));
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; scn.dirty = true; wake(); }
+    skewPanels();
   }
   const ro = 'ResizeObserver' in window ? new ResizeObserver(fit) : null; ro ? ro.observe(host) : addEventListener('resize', fit);
 
@@ -358,7 +445,7 @@ export function makePhoto(host, opts = {}) {
     fixtures: () => FIXTURES.filter(f => api.hasFixture(f)),
     set(p) { merge(st, p); st.curtain = clamp(+st.curtain || 0, 0, 100); st.sheer = clamp(+st.sheer || 0, 0, 100); scn.dirty = true; wake(); return api; },
     refresh() { scn.dirty = true; wake(); }, pos: () => cur * 100,
-    jump() { cur = st.curtain / 100; she = st.sheer / 100; for (const f of FIXTURES) { lit[f].I = target(f); lit[f].c = colourOf(f).slice(); } scn.dirty = true; wake(); },
+    jump() { cur = st.curtain / 100; she = st.sheer / 100; tm = st.time; tvK = st.tv.on ? 1 : 0; acK = st.ac.on ? 1 : 0; chShow = st.tv.ch; chK = 1; for (const f of FIXTURES) { lit[f].I = target(f); lit[f].c = colourOf(f).slice(); } scn.dirty = true; wake(); },
     flash(col, k = 1) { flashC = hexRGB(col) || [255, 255, 255]; flashT = k; scn.dirty = true; wake(); },
     door(open) { doorOpen = !!open; host.classList.toggle('dooropen', doorOpen); },
     panel(html) { lastPanel = html; dom.querySelectorAll('.ph-scr').forEach(s => { s.innerHTML = html; }); },

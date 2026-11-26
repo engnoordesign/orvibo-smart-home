@@ -8,9 +8,11 @@ smart lock → curtains → climate & TV → phone control → more products →
 
 Every product section is a **real photo of a real room, relit live** as the visitor uses the controls:
 lamps and LED lines fade and change colour, night falls, curtains slide across the window, the TV
-plays, the AC blows air and the room cools, the front door swings open onto the street. The controls
-sit right under the photo, and on phones the photo stays pinned at the top while the visitor scrolls
-the controls, so every change is seen as it happens. Tapping a lamp, the AC, the TV or the curtain in
+plays, the AC blows air and the room cools, the front door swings open onto the street. Curtains, TV
+screens and the AC follow the angle of the wall in the photo and pass behind the furniture in front of
+them; lights fade, the motor speeds up and slows down, and dusk falls gradually. The controls sit
+beside the photo (just below it on phones), so the picture and its controls move together and every
+change is seen as it happens. Tapping a lamp, the AC, the TV or the curtain in
 the photo works too. In the colour quality section the visitor drags a line across a real still life
 to compare ORVIBO light with an ordinary one, and can switch on a "slow-motion camera" that shows
 flicker.
@@ -31,7 +33,8 @@ Sign in with a username and password, then edit:
 - which sections show and in what order, and every section title
 - **scene photos**: replace the photo of any scene with one from your own projects, then click on it to
   place the lamps (and where their light lands), LED lines, windows with curtains, the TV, the AC, the
-  door, the lock and wall screens; drag the markers to adjust them
+  door, the lock and wall screens; drag the markers to adjust them, and drag the four corners of a
+  window, TV or AC to match the angle of the wall
 - products: add, edit, hide, delete or reorder; name, description and specifications in both
   languages, a photo, and where the product appears in the live scenes
 - our work: projects with location, type, year, description, devices used and photos

@@ -125,7 +125,8 @@ table.cmp { width: 100%; border-collapse: collapse; min-width: 640px; font-size:
 .desc { color: var(--muted); font-size: 14.5px; margin: 0; }
 
 /* MixPad device: glass panel in a metal frame, the way it hangs on the wall */
-.mpdock { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: center; }
+.mpdock { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: center; text-align: center; }
+.mpdock .chips { justify-content: center; }
 .device { position: relative; margin: 0 auto; width: 100%; max-width: 380px; padding: 4px; border-radius: 20px; background: linear-gradient(145deg, #f4ecdc, #b89c66 38%, #e9dcc0 55%, #8c7446); box-shadow: 0 18px 36px rgba(0, 0, 0, .35), 0 2px 5px rgba(0, 0, 0, .25); }
 .device.m-7 { max-width: 330px; background: linear-gradient(145deg, #f3f4f6, #a9adb5 40%, #e7e8eb 55%, #80848c); }
 .device.m-mini { max-width: 210px; border-radius: 24px; background: linear-gradient(145deg, #ffffff, #d7d9dd 45%, #f5f5f6 55%, #b3b6bc); }
@@ -160,7 +161,7 @@ table.cmp { width: 100%; border-collapse: collapse; min-width: 640px; font-size:
 .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); } .log i { font-style: normal; color: var(--ink); margin-inline-end: 6px; font-variant-numeric: tabular-nums; }
 
 /* phone remote */
-.phoneblk { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 22px; align-items: start; }
+.phoneblk { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 22px; align-items: center; }
 .phone { background: #0d1117; border-radius: 42px; padding: 10px; box-shadow: 0 24px 50px rgba(10, 16, 28, .3); }
 .phone .scr { background: var(--phone); border-radius: 33px; height: 600px; overflow: auto; padding: 30px 14px 14px; scrollbar-width: none; }
 .phone .scr::-webkit-scrollbar { display: none; }
@@ -234,18 +235,20 @@ footer a { color: var(--muted); }
 .ph-load { position: absolute; inset: 0; display: grid; place-items: center; color: #9aa4b2; font-size: 22px; }
 .photo.ready .ph-load { display: none; }
 .ph-hot { position: absolute; border-radius: 12px; cursor: pointer; transition: box-shadow .2s, background .2s; }
-.ph-hot:hover, .ph-hot:focus-visible { background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .7); }
-.ph-hot i { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px; border-radius: 50%; background: rgba(255, 255, 255, .9); box-shadow: 0 0 0 3px rgba(255, 255, 255, .28), 0 1px 4px rgba(0, 0, 0, .4); animation: hotp 2.6s ease-in-out infinite; }
+.ph-hot:hover, .ph-hot:focus-visible { background: radial-gradient(closest-side, rgba(255, 255, 255, .14), rgba(255, 255, 255, 0)); }
+.ph-hot i { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px; border-radius: 50%; background: rgba(255, 255, 255, .75); box-shadow: 0 0 0 3px rgba(255, 255, 255, .18), 0 1px 3px rgba(0, 0, 0, .35); opacity: .55; transition: opacity .4s, transform .4s; animation: hotp 3.2s ease-in-out infinite; }
+.photo:hover .ph-hot i { opacity: .95; }
+.ph-hot:hover i { transform: scale(1.3); }
 .ph-hot.dup i { display: none; }
 @keyframes hotp { 50% { box-shadow: 0 0 0 7px rgba(255, 255, 255, 0), 0 1px 4px rgba(0, 0, 0, .4); } }
 /* the door: a slice of the photo that swings open in 3D, with the street behind it */
 .ph-door { position: absolute; perspective: 1300px; }
 .ph-out { position: absolute; inset: 0; background: #c9d2da center 62% / cover; box-shadow: inset 0 0 24px rgba(0, 0, 0, .55); }
-.ph-leaf { position: absolute; inset: 0; transform-origin: 100% 50%; transition: transform 1.25s cubic-bezier(.45, .05, .25, 1); background-repeat: no-repeat; }
+.ph-leaf { position: absolute; inset: 0; transform-origin: 100% 50%; transition: transform 1.8s cubic-bezier(.5, .05, .2, 1); background-repeat: no-repeat; }
 .ph-door.hl .ph-leaf { transform-origin: 0 50%; }
 .dooropen .ph-leaf { transform: rotateY(74deg); }
 .dooropen .ph-door.hl .ph-leaf { transform: rotateY(-74deg); }
-.ph-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0, 0, 0, .45), rgba(0, 0, 0, .1)); opacity: 0; transition: opacity 1.25s; }
+.ph-shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0, 0, 0, .45), rgba(0, 0, 0, .1)); opacity: 0; transition: opacity 1.8s; }
 .dooropen .ph-shade { opacity: 1; }
 .ph-lock { position: absolute; }
 .ph-lock .lockart { width: 100%; height: 100%; display: block; overflow: visible; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .35)); }
@@ -286,11 +289,9 @@ footer a { color: var(--muted); }
 .cri-l { position: absolute; top: 10px; color: #fff; font-size: 12.5px; background: rgba(8, 10, 14, .6); padding: 3px 10px; border-radius: 12px; pointer-events: none; }
 .cri-l.lo { left: 10px; } .cri-l.hi { right: 10px; }
 
-/* the controls docked right under the photo, and the photo pinned on screen while scrolling */
-.stagecol { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 70px); z-index: 4; min-width: 0; }
-.stagecol > .stage { border-radius: 20px 20px 0 0; }
-.stagecol > .stage:last-child, .phoneblk .stagecol > .stage { border-radius: 20px; }
-.dock { background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 20px 20px; padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 18px 40px rgba(10, 16, 28, .12); }
+/* the controls sit beside the photo (below it on phones); photo and controls scroll together */
+.side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dock { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 14px 34px rgba(10, 16, 28, .08); }
 .dock:empty { display: none; }
 .dk-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px; }
 .dk-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -314,12 +315,7 @@ input[type=range].cct { accent-color: #f3c37a; }
 .prow .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .app .card2.bell { display: flex; align-items: center; gap: 8px; border-color: #7fd1ff; } .app .card2.bell b { flex: 1; font-size: 13px; }
 @media (max-width: 980px) {
-  .demo { display: block; }
-  .stagecol { display: contents; }
-  .stagecol > .stage { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 54px); z-index: 4; box-shadow: 0 10px 24px rgba(10, 16, 28, .28); }
-  .demo .panel { margin-top: 14px; }
   .phoneblk { display: flex; flex-direction: column; align-items: stretch; }
-  .phoneblk .stagecol > .stage { order: -1; }
+  .phoneblk > .stage { order: -1; }
   .lockdock { grid-template-columns: minmax(0, 1fr); justify-items: center; }
 }
-@media (max-height: 560px) and (orientation: landscape) { .stagecol, .stagecol > .stage { position: relative !important; top: auto !important; } }

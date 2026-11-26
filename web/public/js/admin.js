@@ -4,6 +4,7 @@ import { sprite, icon, ICON_NAMES } from './icons.js';
 import { loadContent, saveContent, authState, login, logout, createLocalAccount, changeAccount, uploadImage, resetLocal, detect, merge } from './store.js';
 import { DEFAULT_CONTENT, UI } from './content.js';
 import { deviceArt, artKey } from './devices.js';
+import { quadOf } from './photo.js';
 
 let LANG = 'ar', THEME = null;
 try { LANG = localStorage.getItem('dh-admin-lang') || 'ar'; THEME = localStorage.getItem('dh-admin-theme'); } catch (e) { /* ignore */ }
@@ -101,7 +102,7 @@ const AREAS = {
 // ---------- scene photos: upload a photo and place the lights and devices on it ----------
 const SCN = { hero: ['الواجهة الرئيسية', 'Hero'], lighting: ['الإضاءة', 'Lighting'], mixpad: ['MixPad (غرفة النوم)', 'MixPad (bedroom)'], lock: ['القفل وباب المدخل', 'Lock & front door'], curtain: ['الستائر', 'Curtains'], climate: ['التكييف', 'Climate'], remote: ['الهاتف (الصالة)', 'Phone (living room)'], cri: ['جودة اللون', 'Colour quality'] };
 const ZT = { light: ['مصباح', 'Light', '#ffcf5a'], line: ['خط إضاءة', 'LED line', '#ffa94d'], area: ['خطوط ظاهرة في الصورة', 'Lines visible in the photo', '#ff7ad9'], window: ['نافذة بستارة', 'Window with curtain', '#5ac8ff'], tv: ['تلفزيون', 'TV', '#9b8cff'], ac: ['مكيّف', 'AC unit', '#5affc8'], door: ['باب', 'Door', '#ff8a5a'], lock: ['القفل على الباب', 'Lock on the door', '#ff5a5a'], panel: ['شاشة على الحائط', 'Wall screen', '#c8ff5a'] };
-const ZHINT = { light: ['اضغط على مكان المصباح، ثم اضغط حيث يقع ضوؤه.', 'Click where the lamp is, then click where its light lands.'], line: ['اضغط على بداية الخط ثم نهايته.', 'Click the start of the line, then its end.'], rect: ['اسحب مستطيلاً فوق المكان.', 'Drag a rectangle over it.'] };
+const ZHINT = { light: ['اضغط على مكان المصباح، ثم اضغط حيث يقع ضوؤه.', 'Click where the lamp is, then click where its light lands.'], line: ['اضغط على بداية الخط ثم نهايته.', 'Click the start of the line, then its end.'], rect: ['اسحب مستطيلاً فوق المكان، ثم اسحب زواياه الأربع لتطابق زاوية الجدار في الصورة.', 'Drag a rectangle over it, then drag its four corners to match the angle of the wall in the photo.'] };
 let scKey = 'lighting', zTool = null, zFix = 'down', zSel = -1, zTmp = null;
 const scene = () => { C.scenes = C.scenes || {}; if (!C.scenes[scKey]) C.scenes[scKey] = clone(DEFAULT_CONTENT.scenes[scKey]); const s = C.scenes[scKey]; s.zones = s.zones || []; return s; };
 const zName = z => `${L(...ZT[z.t].slice(0, 2))}${z.f ? ' · ' + L(...FIXTURES[z.f]) : ''}`;
@@ -110,14 +111,16 @@ function zSvg(sc) {
   return z.map((q, i) => { const on = i === zSel ? ' sel' : '', c = col(q.t);
     if (q.t === 'light') return `<g class="zz${on}"><line x1="${q.p[0]}" y1="${q.p[1]}" x2="${(q.a || q.p)[0]}" y2="${(q.a || q.p)[1]}" stroke="${c}" stroke-dasharray="1 1" vector-effect="non-scaling-stroke"/>${q.a ? `<ellipse cx="${q.a[0]}" cy="${q.a[1]}" rx="${(q.r || 10) * 0.6}" ry="${(q.r || 10) * 0.4}" fill="${c}" fill-opacity=".18" stroke="${c}" vector-effect="non-scaling-stroke"/>` : ''}</g>`;
     if (q.t === 'line') return `<line class="zz${on}" x1="${q.p[0]}" y1="${q.p[1]}" x2="${q.p[2]}" y2="${q.p[3]}" stroke="${c}" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
-    return `<rect class="zz${on}" x="${q.p[0]}" y="${q.p[1]}" width="${q.p[2]}" height="${q.p[3]}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-dasharray="${q.t === 'area' ? '2 1' : '0'}" vector-effect="non-scaling-stroke"/>`; }).join('')
+    const pts = quadOf(q), cuts = (q.cut || []).map(poly => `<polygon points="${poly.join(' ')}" fill="#000" fill-opacity=".35" stroke="#fff" stroke-opacity=".4" stroke-dasharray="1 1" vector-effect="non-scaling-stroke"/>`).join('');
+    return `${cuts}<polygon class="zz${on}" points="${pts.join(' ')}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-dasharray="${q.t === 'area' ? '2 1' : '0'}" vector-effect="non-scaling-stroke"/>`; }).join('')
     + (zTmp ? (zTmp.rect ? `<rect x="${zTmp.rect[0]}" y="${zTmp.rect[1]}" width="${zTmp.rect[2]}" height="${zTmp.rect[3]}" fill="#fff" fill-opacity=".15" stroke="#fff" vector-effect="non-scaling-stroke"/>` : `<circle cx="${zTmp.p[0]}" cy="${zTmp.p[1]}" r=".8" fill="#fff"/>`) : '');
 }
 function zHandles(sc) {
   return (sc.zones || []).map((q, i) => { const h = (k, x, y, cls = '') => `<i class="zh ${cls} ${i === zSel ? 'sel' : ''}" data-zi="${i}" data-h="${k}" style="left:${x}%;top:${y}%;--c:${ZT[q.t]?.[2]}" title="${esc(zName(q))}"></i>`;
     if (q.t === 'light') return h('p', ...q.p, 'pt') + (q.a ? h('a', ...q.a, 'aim') : '');
     if (q.t === 'line') return h('p1', q.p[0], q.p[1], 'pt') + h('p2', q.p[2], q.p[3], 'pt');
-    return h('mv', q.p[0] + q.p[2] / 2, q.p[1] + q.p[3] / 2, 'mv') + h('sz', q.p[0] + q.p[2], q.p[1] + q.p[3], 'sz'); }).join('');
+    if (q.t === 'area') return h('mv', q.p[0] + q.p[2] / 2, q.p[1] + q.p[3] / 2, 'mv') + h('sz', q.p[0] + q.p[2], q.p[1] + q.p[3], 'sz');
+    const k = quadOf(q); return h('mv', q.p[0] + q.p[2] / 2, q.p[1] + q.p[3] / 2, 'mv') + [0, 1, 2, 3].map(n => h('c' + n, k[n * 2], k[n * 2 + 1], 'sz')).join(''); }).join('');
 }
 function zRefresh() { const sc = scene(), s = $('#zed svg'), h = $('#zed .zhs'); if (s) s.innerHTML = zSvg(sc); if (h) h.innerHTML = zHandles(sc); }
 function zRow(q, i) {
@@ -133,7 +136,7 @@ function zRow(q, i) {
 AREAS.scenes = () => {
   const sc = scene(), img = safeUrl(sc.img) || DEFAULT_CONTENT.scenes[scKey]?.img, isCri = scKey === 'cri';
   const hint = zTool ? (zTool === 'light' ? ZHINT.light : zTool === 'line' ? ZHINT.line : ZHINT.rect) : null;
-  return `<div class="box"><p class="hint">${L('كل مشهد في الموقع صورة حقيقية تُضاء مباشرة. ارفع صورة من مشاريعك، ثم حدّد عليها أماكن الإضاءة والنوافذ والأجهزة. اسحب النقاط لتعديلها.', 'Every scene on the site is a real photo lit live. Upload a photo from your own projects, then mark where the lights, windows and devices are. Drag the dots to adjust them.')}</p>
+  return `<div class="box"><p class="hint">${L('كل مشهد في الموقع صورة حقيقية تُضاء مباشرة. ارفع صورة من مشاريعك، ثم حدّد عليها أماكن الإضاءة والنوافذ والأجهزة. اسحب النقاط لتعديلها، واسحب زوايا النافذة أو التلفزيون أو المكيّف لتتبع زاوية الجدار.', 'Every scene on the site is a real photo lit live. Upload a photo from your own projects, then mark where the lights, windows and devices are. Drag the dots to adjust them; drag the corners of a window, TV or AC so it follows the angle of the wall.')}</p>
       <div class="chips">${Object.entries(SCN).map(([k, n]) => `<button class="chip ${scKey === k ? 'on' : ''}" data-a="zscene" data-v="${k}">${esc(n[LANG === 'ar' ? 0 : 1])}</button>`).join('')}</div></div>
     <div class="box"><h2>${esc(L(...SCN[scKey]))}</h2>
       <div class="row" style="margin-top:10px"><label class="btn">${icon('image')} ${L('استبدل الصورة', 'Replace the photo')}<input type="file" accept="image/*" hidden data-up="scenes.${scKey}.img"></label>
@@ -168,7 +171,10 @@ document.addEventListener('pointermove', e => {
   if (zDrag.make) { const [x0, y0] = zTmp.start; zTmp.rect = [Math.min(x0, pt[0]), Math.min(y0, pt[1]), r1(Math.abs(pt[0] - x0)), r1(Math.abs(pt[1] - y0))]; zRefresh(); return; }
   const { q, h, from, orig } = zDrag, dx = pt[0] - from[0], dy = pt[1] - from[1];
   if (h === 'p' || h === 'a') { q[h] = pt; } else if (h === 'p1') { q.p[0] = pt[0]; q.p[1] = pt[1]; } else if (h === 'p2') { q.p[2] = pt[0]; q.p[3] = pt[1]; }
-  else if (h === 'mv') { q.p[0] = r1(orig.p[0] + dx); q.p[1] = r1(orig.p[1] + dy); } else if (h === 'sz') { q.p[2] = r1(Math.max(0.5, orig.p[2] + dx)); q.p[3] = r1(Math.max(0.5, orig.p[3] + dy)); }
+  else if (h === 'mv') { q.p[0] = r1(orig.p[0] + dx); q.p[1] = r1(orig.p[1] + dy); if (orig.q) q.q = orig.q.map((v, n) => r1(v + (n % 2 ? dy : dx))); }
+  else if (/^c\d$/.test(h)) { // a corner: the shape follows the angle of the wall in the photo
+    const n = +h[1], k = quadOf(orig).slice(); k[n * 2] = pt[0]; k[n * 2 + 1] = pt[1]; q.q = k;
+    const xs = [k[0], k[2], k[4], k[6]], ys = [k[1], k[3], k[5], k[7]]; q.p = [Math.min(...xs), Math.min(...ys), r1(Math.max(...xs) - Math.min(...xs)), r1(Math.max(...ys) - Math.min(...ys))]; } else if (h === 'sz') { q.p[2] = r1(Math.max(0.5, orig.p[2] + dx)); q.p[3] = r1(Math.max(0.5, orig.p[3] + dy)); }
   zRefresh();
 });
 document.addEventListener('pointerup', () => {
