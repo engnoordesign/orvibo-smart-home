@@ -13,7 +13,12 @@ screens and the AC follow the angle of the wall in the photo and pass behind the
 them; lights fade, the motor speeds up and slows down, and dusk falls gradually. The controls sit
 beside the photo (just below it on phones), so the picture and its controls move together and every
 change is seen as it happens. Tapping a lamp, the AC, the TV or the curtain in
-the photo works too. In the colour quality section the visitor drags a line across a real still life
+the photo works too. The phone section is an app in the style of ORVIBO Home: rooms, scenes and
+device cards; tapping any device opens its control screen at once (a brightness bar and white tone for
+lights, the opening of curtains, a temperature dial with mode and fan for the AC, a remote for the TV,
+and unlock, one-time code, doorbell camera and history for the lock), while the round button on a card
+switches it on or off. The photo beside the phone shows the room chosen in the app, and every change
+also reaches that room's own section. In the colour quality section the visitor drags a line across a real still life
 to compare ORVIBO light with an ordinary one, and can switch on a "slow-motion camera" that shows
 flicker.
 
