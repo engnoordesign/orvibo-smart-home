@@ -9,7 +9,8 @@ import { deviceArt, artKey } from './devices.js';
 
 // the official ORVIBO product photos used as live devices: where the screen and the keys are on each photo (in %)
 const REAL = {
-  mp: { x: { src: 'img/products/mixpad12.webp', scr: [10.8, 7, 78.4, 57], n: 10 }, '7': { src: 'img/products/mixpad7.webp', scr: [11.1, 5.8, 78, 63.2], n: 8 }, mini: { src: 'img/products/mixpad4.webp', scr: [13.9, 5.6, 70.8, 71.2], n: 4 } },
+  mp: { x: { src: 'img/products/mixpad12.webp', scr: [10.8, 7, 78.4, 57], n: 10 }, '7': { src: 'img/products/mixpad7.webp', scr: [11.1, 5.8, 78, 63.2], n: 8 }, mini: { src: 'img/products/mixpad4.webp', scr: [13.9, 5.6, 70.8, 71.2], n: 4 },
+    '10': { src: 'img/products/mixpad10.webp', scr: [11, 7.5, 57.2, 55.5], n: 8 }, m5: { src: 'img/products/mixpadm5.webp', scr: [8, 5, 81, 57], n: 4 } },
   // the inside face of the lock, seen from the hallway in the photo (the V5 has a video screen on this side)
   inside: { face: { src: 'img/products/lock-v5-in.webp', name: 'ORVIBO V5', scr: [4.5, 2.6, 55.5, 24] }, finger: { src: 'img/products/lock-c1-in.webp', name: 'ORVIBO C1' } },
   // the outside face with its real keypad, used as the touch keypad
@@ -103,7 +104,12 @@ const SECTIONS = {
   curtain: () => demo('curtain', 'curtain', true),
   climate: () => demo('climate', 'climate'),
   remote: () => `<section class="section alt" id="remote"><div class="wrap">${head(C.blocks.remote)}<div class="phoneblk"><div class="phone"><div class="scr app" id="pn-remote"></div></div><div class="stage" id="st-remote"></div></div><div class="plist" style="margin-top:18px">${prods('remote').map(p => `<div class="card prow"><span class="thumb">${thumb(p, 'phone')}</span><div><h3>${esc(tx(p.name))}</h3><p>${esc(tx(p.desc))}</p>${specs(p)}</div></div>`).join('')}</div></div></section>`,
-  catalog: () => { const ps = prods('other'); return ps.length ? `<section class="section" id="catalog"><div class="wrap">${head(C.blocks.catalog)}<div class="grid3">${ps.map(p => `<article class="prod"><div class="ph">${thumb(p, 'box')}</div><div class="in"><h3>${esc(tx(p.name))}</h3><p class="desc">${esc(tx(p.desc))}</p>${specs(p)}</div></article>`).join('')}</div></div></section>` : ''; },
+  catalog: () => { const ps = prods('other'); if (!ps.length) return '';
+    const card = p => `<article class="prod"><div class="ph">${thumb(p, 'box')}</div><div class="in"><h3>${esc(tx(p.name))}</h3><p class="desc">${esc(tx(p.desc))}</p>${specs(p)}</div></article>`;
+    const G = C.groups || {}, keys = [...Object.keys(G).filter(g => ps.some(p => p.group === g)), ...(ps.some(p => !G[p.group]) ? ['_'] : [])];
+    return `<section class="section" id="catalog"><div class="wrap">${head(C.blocks.catalog)}
+      ${keys.length > 1 ? `<div class="chips catchips">${keys.map(g => `<a class="chip" href="#cat-${g}">${esc(g === '_' ? L('أخرى', 'Other') : tx(G[g]))} <span class="num">${ps.filter(p => g === '_' ? !G[p.group] : p.group === g).length}</span></a>`).join('')}</div>` : ''}
+      ${keys.map(g => `<div class="catgroup" id="cat-${g}">${keys.length > 1 ? `<h3 class="cath">${esc(g === '_' ? L('أخرى', 'Other') : tx(G[g]))}</h3>` : ''}<div class="grid3">${ps.filter(p => g === '_' ? !G[p.group] : p.group === g).map(card).join('')}</div></div>`).join('')}</div></section>`; },
   projects: () => { const ps = C.projects.filter(p => p.on !== false); return `<section class="section alt" id="projects"><div class="wrap">${head(C.blocks.projects)}${ps.length ? `<div class="grid3">${ps.map(p => `<button class="prod proj" data-a="proj" data-v="${esc(p.id)}"><div class="ph">${safeUrl(p.images?.[0]) ? `<img src="${esc(safeUrl(p.images[0]))}" alt="" loading="lazy">` : icon('home')}${p.sample ? `<span class="tag">${L('مثال توضيحي', 'Example')}</span>` : ''}</div><div class="in"><h3>${esc(tx(p.title))}</h3><span class="meta">${[tx(p.type), tx(p.place), p.year].filter(Boolean).map(esc).join(' · ')}</span><p class="desc">${esc(tx(p.desc)).slice(0, 150)}${tx(p.desc).length > 150 ? '…' : ''}</p></div></button>`).join('')}</div>` : `<div class="empty">${L('قريباً: صور من المشاريع التي نفّذناها.', 'Coming soon: photos from the projects we have delivered.')}</div>`}</div></section>`; },
   contact: () => { const b = C.brand, items = [['phone', L('الهاتف', 'Phone'), b.phone], ['chat', 'WhatsApp', b.whatsapp], ['mail', L('البريد', 'Email'), b.email], ['pin', L('العنوان', 'Address'), tx(b.address)], ['clock', L('ساعات العمل', 'Opening hours'), tx(b.hours)], ['globe', 'Instagram', b.instagram], ['globe', 'Facebook', b.facebook]].filter(i => i[2]);
     return `<section class="section" id="contact"><div class="wrap">${head(C.blocks.contact)}${items.length ? `<div class="contact">${items.map(([ic, l, v]) => `<div class="card">${icon(ic)}<small>${esc(l)}</small><b>${esc(v)}</b></div>`).join('')}</div>` : `<div class="empty">${esc(C.brand.name)} — ${esc(tx(C.brand.tagline))}</div>`}</div></section>`; },
@@ -202,7 +208,7 @@ function mpScreen() {
   const dev = [...r.fixtures().map(f => tile('l:' + f, FIX_ICON[f], fixName(f), st[f].on ? st[f].bri + '%' : L('مطفأ', 'Off'), st[f].on)), cur,
     r.has('tv') ? tile('tv', 'tv', L('التلفزيون', 'TV'), st.tv.on ? (LANG === 'ar' ? TV_CHANNELS[st.tv.ch].ar : TV_CHANNELS[st.tv.ch].en) : L('مطفأ', 'Off'), st.tv.on) : null,
     r.has('tv') && st.tv.on ? tile('ch', 'film', L('القناة التالية', 'Next channel'), '', false) : null].filter(Boolean);
-  const real = REAL.mp[model] || REAL.mp.x, q = real.scr, tiles = model === 'mini' ? [sc[0], sc[2], ...dev].slice(0, 4) : [...sc, ...dev].slice(0, real.n);
+  const real = REAL.mp[model] || REAL.mp.x, q = real.scr, tiles = model === 'mini' || model === 'm5' ? [sc[0], sc[2], ...dev].slice(0, 4) : [...sc, ...dev].slice(0, real.n);
   return `<div class="mpreal m-${esc(model)}"><img src="${real.src}" alt="${esc(tx(mpProd()?.name))}" draggable="false"><div class="mpscr" style="left:${q[0]}%;top:${q[1]}%;width:${q[2]}%;height:${q[3]}%"><div class="mpscreen"><div class="mphead"><b class="num">${fmtT(st.time)}</b><span>${L('غرفة النوم', 'Bedroom')} · ${st.temp.toFixed(0)}°</span></div><div class="mpgrid">${tiles.join('')}</div></div></div></div>`;
 }
 function dockMixpad() {

@@ -74,10 +74,11 @@ const AREAS = {
       ${list.map(([p, i]) => { const open = openItems.has(p.id), base = `products.${i}`; return `<div class="item ${open ? '' : 'closed'}"><div class="ihead"><span class="thumb">${safeUrl(p.img) ? `<img src="${esc(safeUrl(p.img))}" alt="">` : artKey(p) ? deviceArt(artKey(p)) : icon(p.cat === 'other' ? (p.icon || 'box') : 'box')}</span><span class="t" data-a="open" data-v="${esc(p.id)}" role="button" tabindex="0">${esc(tx(p.name)) || L('منتج بلا اسم', 'Unnamed product')}</span><span class="tag">${esc(CATS[p.cat]?.[LANG === 'ar' ? 0 : 1] || p.cat)}</span>${p.on === false ? `<span class="tag off">${L('مخفي', 'Hidden')}</span>` : ''}${listOps('products', i, C.products.length)}</div>
         ${open ? `<div class="grid2">${fSel(`${base}.cat`, L('القسم', 'Section'), Object.entries(CATS).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]))}
           ${p.cat === 'lighting' ? fSel(`${base}.fixture`, L('نوع الإضاءة في المشهد', 'Light type in the scene'), Object.entries(FIXTURES).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]), false) : ''}
-          ${p.cat === 'mixpad' ? fSel(`${base}.model`, L('شكل اللوحة', 'Panel shape'), [['x', L('كبيرة أفقية', 'Large landscape')], ['7', L('متوسطة', 'Medium')], ['mini', L('مربعة صغيرة', 'Small square')]], false) : ''}
+          ${p.cat === 'mixpad' ? fSel(`${base}.model`, L('شكل اللوحة', 'Panel shape'), [['x', 'MixPad 12'], ['10', 'MixPad 10'], ['7', 'MixPad 7'], ['mini', 'MixPad 4'], ['m5', 'MixPad M5']], false) : ''}
           ${p.cat === 'lock' ? fSel(`${base}.model`, L('طرق الفتح', 'Unlock methods'), [['face', L('مع التعرّف على الوجه', 'With face recognition')], ['finger', L('بصمة ورمز وبطاقة', 'Fingerprint, code, card')]], false) : ''}
           ${p.cat === 'climate' ? fSel(`${base}.model`, L('نوع الجهاز', 'Device type'), [['ac', L('وحدة تحكم بالمكيّف', 'AC controller')], ['ir', L('ريموت ذكي', 'Smart IR remote')]], true) : ''}
-          ${p.cat === 'other' ? iconSel(`${base}.icon`, L('الأيقونة', 'Icon')) : ''}</div>
+          ${p.cat === 'other' ? iconSel(`${base}.icon`, L('الأيقونة', 'Icon')) : ''}
+          ${p.cat === 'other' ? fSel(`${base}.group`, L('المجموعة في «منتجات أخرى»', 'Group in “More products”'), [['', L('أخرى', 'Other')], ...Object.entries(C.groups || {}).map(([k, v]) => [k, tx(v)])], false) : ''}</div>
           ${fBi(`${base}.name`, L('الاسم', 'Name'))}${fBi(`${base}.desc`, L('الوصف', 'Description'), 3)}${fBi(`${base}.specs`, L('المواصفات — سطر لكل ميزة', 'Specifications — one per line'), 4)}
           <div class="fld"><span>${L('صورة المنتج (اختيارية — بدونها يظهر رسم واقعي للجهاز)', 'Product photo (optional — without one, a realistic drawing of the device is shown)')}</span><div class="imgs">${safeUrl(p.img) ? `<figure><img src="${esc(safeUrl(p.img))}" alt=""><div class="ops"><button data-a="rmimg" data-p="${base}.img" aria-label="${L('حذف الصورة', 'Remove photo')}">${icon('trash')}</button></div></figure>` : ''}<label class="upl">${icon('image')}<span>${L('ارفع صورة', 'Upload photo')}</span><input type="file" accept="image/*" hidden data-up="${base}.img"></label></div></div>
           ${fSw(`${base}.on`, L('ظاهر في الموقع', 'Visible on the site'))}` : ''}</div>`; }).join('')}
@@ -235,7 +236,7 @@ const ACT = {
   pcat: v => { pCat = v; render(); },
   mv: (v, el) => { const arr = getP(el.dataset.p), i = +el.dataset.i, j = i + +el.dataset.d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; markDirty(); render(); },
   askdel: (v, el) => { pendingDel = el.dataset.p + ':' + el.dataset.i; render(); setTimeout(() => { if (pendingDel === el.dataset.p + ':' + el.dataset.i) { pendingDel = null; render(); } }, 4000); },
-  del: (v, el) => { getP(el.dataset.p).splice(+el.dataset.i, 1); pendingDel = null; markDirty(); render(); },
+  del: (v, el) => { const arr = getP(el.dataset.p), gone = arr[+el.dataset.i]; if (el.dataset.p === 'products' && gone?.id) (C.removed = C.removed || []).push(gone.id); arr.splice(+el.dataset.i, 1); pendingDel = null; markDirty(); render(); },
   rmimg: (v, el) => { setP(el.dataset.p, ''); if (el.dataset.p.endsWith('.img')) setP(el.dataset.p.replace(/\.img$/, '.imgOff'), true); markDirty(); render(); },
   imgdel: (v, el) => { getP(el.dataset.p).splice(+el.dataset.i, 1); markDirty(); render(); },
   imgmv: (v, el) => { const a = getP(el.dataset.p), i = +el.dataset.i; [a[i - 1], a[i]] = [a[i], a[i - 1]]; markDirty(); render(); },

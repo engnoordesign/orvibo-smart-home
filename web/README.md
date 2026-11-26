@@ -26,7 +26,11 @@ The ORVIBO devices are shown with their **official product photos** from ORVIBO'
 (`public/img/products/`): the MixPad 12, 7 and 4 panels (with the live screen laid on the real glass),
 the V5 and C1 smart locks (the inside of the lock is fitted on the door in the photo, the outside is
 the touchable keypad), SOPRO and Gauss lights, the G1 curtain motor, TS41 thermostat, Magic Dot IR
-controller, MixSwitch, MixSense S361 and the sensors, camera and button. Track lights, LED strips,
+controller, MixSwitch, MixSense S361 and the sensors, camera and button. The full current ORVIBO range is in the
+catalogue with photos and specifications: five MixPad panels, two locks, eight SOPRO / Gauss / ceiling
+lights, four switch families, seven sensors and buttons, two cameras, the TS41 thermostat, Magic Dot
+and five MixStation climate and hot-water systems; "More products" groups them under headings.
+Descriptions are written for this site; specifications follow ORVIBO's product pages. Track lights, LED strips,
 pendants and wall washers have no photo on ORVIBO's site and keep a drawing; upload a photo for any
 product in the admin panel and it replaces the default everywhere.
 

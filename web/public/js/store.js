@@ -36,6 +36,9 @@ export function merge(saved) {
   // products saved before official photos were added get them, unless the admin removed the photo on purpose
   const defs = Object.fromEntries(DEFAULT_CONTENT.products.map(p => [p.id, p]));
   for (const p of out.products || []) { const d = defs[p.id]; if (d && d.img && !p.img && !p.imgOff) p.img = d.img; }
+  // products added to the defaults later appear for sites saved earlier (unless the admin deleted them)
+  const have = new Set((out.products || []).map(p => p.id)), gone = new Set(out.removed || []);
+  if (saved.products) DEFAULT_CONTENT.products.forEach((d, i) => { if (have.has(d.id) || gone.has(d.id)) return; const prev = DEFAULT_CONTENT.products[i - 1], at = prev ? out.products.findIndex(x => x.id === prev.id) : -1; out.products.splice(at + 1, 0, clone(d)); have.add(d.id); });
   return out;
 }
 export async function loadContent() {

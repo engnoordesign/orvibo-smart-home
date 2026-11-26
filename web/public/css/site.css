@@ -322,14 +322,15 @@ input[type=range].cct { accent-color: #f3c37a; }
 /* ---------- real ORVIBO devices ---------- */
 /* MixPad: the product photo, with the live screen laid exactly on its glass */
 .mpreal { position: relative; width: 100%; max-width: 440px; margin: 0 auto; user-select: none; }
-.mpreal.m-7 { max-width: 360px; } .mpreal.m-mini { max-width: 250px; }
+.mpreal.m-7, .mpreal.m-10 { max-width: 380px; } .mpreal.m-mini { max-width: 250px; } .mpreal.m-m5 { max-width: 230px; }
 .mpreal > img { display: block; width: 100%; height: auto; filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .28)); pointer-events: none; }
 .mpscr { position: absolute; overflow: hidden; border-radius: 1.5%; container-type: size; }
 .mpreal .mpscreen { position: absolute; inset: 0; min-height: 0; border-radius: 0; padding: 4.5cqh 3cqw; gap: 3cqh; font-size: clamp(8px, 7cqh, 12px); }
 .mpreal .mphead b { font-size: clamp(12px, 15cqh, 26px); }
 .mpreal .mphead span { font-size: clamp(7px, 6.5cqh, 11px); }
 .mpreal .mpgrid { grid-template-columns: repeat(5, 1fr); gap: 2.5cqh 1.4cqw; min-height: 0; }
-.mpreal.m-7 .mpgrid { grid-template-columns: repeat(4, 1fr); } .mpreal.m-mini .mpgrid { grid-template-columns: repeat(2, 1fr); }
+.mpreal.m-7 .mpgrid, .mpreal.m-10 .mpgrid { grid-template-columns: repeat(4, 1fr); } .mpreal.m-mini .mpgrid, .mpreal.m-m5 .mpgrid { grid-template-columns: repeat(2, 1fr); }
+.mpreal.m-m5 .mpscreen { font-size: 10px; }
 .mpreal .mpt { padding: 3cqh 2cqw; font-size: clamp(7px, 6cqh, 11px); border-radius: 7px; overflow: hidden; }
 .mpreal .mpt span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mpreal .mpt small { font-size: clamp(6px, 5cqh, 10px); }
@@ -477,3 +478,7 @@ input[type=range].cct { accent-color: #f3c37a; }
   .app .scn { width: 74px; } .app .vbar { width: 96px; height: 200px; } .app .dial { width: 170px; height: 170px; } .app .dial b { font-size: 44px; }
   .app .modes { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* "More products", grouped */
+.catchips { margin-bottom: 8px; } .catchips .chip { text-decoration: none; } .catchips .num { color: var(--muted); margin-inline-start: 4px; }
+.catgroup { scroll-margin-top: 80px; } .cath { font-size: 20px; margin: 26px 0 12px; }
