@@ -161,7 +161,8 @@ table.cmp { width: 100%; border-collapse: collapse; min-width: 640px; font-size:
 .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); } .log i { font-style: normal; color: var(--ink); margin-inline-end: 6px; font-variant-numeric: tabular-nums; }
 
 /* phone remote */
-.phoneblk { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 22px; align-items: center; }
+/* the phone and the room it controls always sit side by side, so every tap is seen at once */
+.phoneblk { display: grid; grid-template-columns: clamp(232px, 30%, 330px) minmax(0, 1fr); gap: clamp(12px, 2.2vw, 24px); align-items: center; }
 .phone { background: #0d1117; border-radius: 42px; padding: 10px; box-shadow: 0 24px 50px rgba(10, 16, 28, .3); }
 .phone .scr { background: var(--phone); border-radius: 33px; height: 600px; overflow: auto; padding: 30px 14px 14px; scrollbar-width: none; }
 .phone .scr::-webkit-scrollbar { display: none; }
@@ -213,9 +214,8 @@ footer .wrap { display: flex; justify-content: space-between; gap: 12px; flex-wr
 footer a { color: var(--muted); }
 
 @media (max-width: 980px) {
-  .hero, .about, .demo, .mpdock, .phoneblk { grid-template-columns: minmax(0, 1fr); }
-  .phoneblk .phone { max-width: 340px; margin: 0 auto; width: 100%; }
-  .phone .scr { height: 540px; }
+  .hero, .about, .demo, .mpdock { grid-template-columns: minmax(0, 1fr); }
+  .phone { border-radius: 34px; padding: 8px; } .phone .scr { height: 500px; border-radius: 27px; }
 }
 @media (max-width: 640px) { .top nav { display: none; } .logo { flex: 1; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
@@ -316,8 +316,6 @@ input[type=range].cct { accent-color: #f3c37a; }
 .prow .thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
 .app .card2.bell { display: flex; align-items: center; gap: 8px; border-color: #7fd1ff; } .app .card2.bell b { flex: 1; font-size: 13px; }
 @media (max-width: 980px) {
-  .phoneblk { display: flex; flex-direction: column; align-items: stretch; }
-  .phoneblk > .stage { order: -1; }
   .lockdock { grid-template-columns: minmax(0, 1fr); justify-items: center; }
 }
 
@@ -465,3 +463,17 @@ input[type=range].cct { accent-color: #f3c37a; }
 .app .lockbig.open .ic { background: #2ec46d; box-shadow: 0 6px 16px rgba(46, 196, 109, .4); }
 .app .lockbig b { font-size: 15px; margin-top: 6px; } .app .lockbig small { color: var(--muted); font-size: 12px; }
 .app .log { max-height: 140px; }
+
+/* small phones: the room photo right above a shorter phone, both on one screen */
+@media (max-width: 600px) {
+  .phoneblk { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+  .phoneblk > .stage { order: -1; }
+  .phoneblk .phone { width: 100%; max-width: 320px; margin: 0 auto; }
+  .phone .scr { height: 340px; }
+}
+/* a narrower phone keeps the app readable */
+@media (max-width: 980px) and (min-width: 601px) {
+  .app .pg { padding: 4px 10px 12px; } .app .dcard { padding: 10px; min-height: 96px; } .app .dcard b { font-size: 12px; }
+  .app .scn { width: 74px; } .app .vbar { width: 96px; height: 200px; } .app .dial { width: 170px; height: 170px; } .app .dial b { font-size: 44px; }
+  .app .modes { grid-template-columns: repeat(2, 1fr); }
+}
