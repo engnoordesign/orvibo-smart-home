@@ -3,6 +3,7 @@
 import { sprite, icon, ICON_NAMES } from './icons.js';
 import { loadContent, saveContent, authState, login, logout, createLocalAccount, changeAccount, uploadImage, resetLocal, detect, merge } from './store.js';
 import { DEFAULT_CONTENT, UI } from './content.js';
+import { deviceArt, artKey } from './devices.js';
 
 let LANG = 'ar', THEME = null;
 try { LANG = localStorage.getItem('dh-admin-lang') || 'ar'; THEME = localStorage.getItem('dh-admin-theme'); } catch (e) { /* ignore */ }
@@ -11,7 +12,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const $ = s => document.querySelector(s);
 const tx = o => (o && typeof o === 'object') ? (o[LANG] || o.ar || o.en || '') : (o || '');
 const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const safeUrl = u => /^(https?:|data:image\/|\/api\/img\/)/i.test(u || '') ? u : '';
+const safeUrl = u => /^(https?:|data:image\/|\/api\/img\/|img\/)/i.test(u || '') && !/["'<>\\]/.test(u) ? u : '';
+const clone = o => JSON.parse(JSON.stringify(o));
 let C = null, dirty = false, tab = 'home', auth = null, mode = 'local', openItems = new Set(), pCat = 'all', pendingDel = null, busy = false;
 
 const getP = path => path.split('.').reduce((o, k) => o == null ? o : o[k], C);
@@ -32,13 +34,13 @@ const fSw = (path, label) => `<div class="row"><button class="sw ${getP(path) !=
 const listOps = (path, i, n) => `<button class="ib" data-a="mv" data-p="${path}" data-i="${i}" data-d="-1" ${i === 0 ? 'disabled' : ''} aria-label="${L('أعلى', 'Up')}">${icon('up')}</button><button class="ib" data-a="mv" data-p="${path}" data-i="${i}" data-d="1" ${i === n - 1 ? 'disabled' : ''} aria-label="${L('أسفل', 'Down')}">${icon('down')}</button>${delBtn(path, i)}`;
 const delBtn = (path, i) => { const k = path + ':' + i; return pendingDel === k ? `<span class="confirm"><b>${L('حذف؟', 'Delete?')}</b><button class="ib bad" data-a="del" data-p="${path}" data-i="${i}" aria-label="${L('تأكيد الحذف', 'Confirm delete')}">${icon('trash')}</button></span>` : `<button class="ib bad" data-a="askdel" data-p="${path}" data-i="${i}" aria-label="${L('حذف', 'Delete')}">${icon('trash')}</button>`; };
 const iconSel = (path, label) => fSel(path, label, ICON_NAMES.map(n => [n, n]), true);
-const CATS = { lighting: ['الإضاءة', 'Lighting'], mixpad: ['لوحات MixPad', 'MixPad'], lock: ['الأقفال', 'Locks'], curtain: ['الستائر', 'Curtains'], climate: ['التكييف والتلفزيون', 'Climate & TV'], remote: ['التحكم من الهاتف', 'Phone control'], other: ['منتجات أخرى', 'More products'] };
+const CATS = { lighting: ['الإضاءة', 'Lighting'], mixpad: ['لوحات MixPad', 'MixPad'], lock: ['الأقفال', 'Locks'], curtain: ['الستائر', 'Curtains'], climate: ['التكييف', 'Climate'], remote: ['التحكم من الهاتف', 'Phone control'], other: ['منتجات أخرى', 'More products'] };
 const FIXTURES = { down: ['سبوت مدمج', 'Downlight'], spot: ['سبوت موجّه', 'Accent spot'], strip: ['إضاءة مخفية', 'Light strip'], track: ['تراك مغناطيسي', 'Magnetic track'], pendant: ['معلّقة', 'Pendant'], washer: ['غاسلة للجدار', 'Wall washer'] };
 
 // ---------- areas ----------
 const TABS = [
   ['home', 'home', ['الواجهة والعلامة', 'Brand & hero']], ['about', 'user', ['من نحن', 'About us']], ['orvibo', 'grid', ['أورفيبو والمقارنة', 'ORVIBO & comparison']],
-  ['sections', 'plan', ['الأقسام وترتيبها', 'Sections & order']], ['products', 'box', ['المنتجات', 'Products']], ['projects', 'image', ['أعمالنا', 'Our work']],
+  ['sections', 'plan', ['الأقسام وترتيبها', 'Sections & order']], ['scenes', 'image', ['صور المشاهد', 'Scene photos']], ['products', 'box', ['المنتجات', 'Products']], ['projects', 'image', ['أعمالنا', 'Our work']],
   ['contact', 'chat', ['التواصل', 'Contact']], ['account', 'key', ['الحساب', 'Account']], ['data', 'save', ['النسخ والاستعادة', 'Backup & restore']],
 ];
 const AREAS = {
@@ -68,14 +70,15 @@ const AREAS = {
     const list = C.products.map((p, i) => [p, i]).filter(([p]) => pCat === 'all' || p.cat === pCat);
     return `<div class="box"><div class="chips">${[['all', L('الكل', 'All')], ...Object.entries(CATS).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]])].map(([k, n]) => `<button class="chip ${pCat === k ? 'on' : ''}" data-a="pcat" data-v="${k}">${esc(n)} <span class="num">${k === 'all' ? C.products.length : C.products.filter(p => p.cat === k).length}</span></button>`).join('')}</div>
       <p class="hint">${L('المنتجات تظهر في قسمها: الإضاءة في مشهد الإضاءة، لوحات MixPad في قسم اللوحات، وهكذا. «منتجات أخرى» تظهر في شبكة البطاقات.', 'Products appear in their own section: lighting in the lighting scene, MixPad models in the panel section, and so on. “More products” appear as cards.')}</p></div>
-      ${list.map(([p, i]) => { const open = openItems.has(p.id), base = `products.${i}`; return `<div class="item ${open ? '' : 'closed'}"><div class="ihead"><span class="thumb">${safeUrl(p.img) ? `<img src="${esc(safeUrl(p.img))}" alt="">` : icon(p.cat === 'other' ? (p.icon || 'box') : 'box')}</span><span class="t" data-a="open" data-v="${esc(p.id)}" role="button" tabindex="0">${esc(tx(p.name)) || L('منتج بلا اسم', 'Unnamed product')}</span><span class="tag">${esc(CATS[p.cat]?.[LANG === 'ar' ? 0 : 1] || p.cat)}</span>${p.on === false ? `<span class="tag off">${L('مخفي', 'Hidden')}</span>` : ''}${listOps('products', i, C.products.length)}</div>
+      ${list.map(([p, i]) => { const open = openItems.has(p.id), base = `products.${i}`; return `<div class="item ${open ? '' : 'closed'}"><div class="ihead"><span class="thumb">${safeUrl(p.img) ? `<img src="${esc(safeUrl(p.img))}" alt="">` : artKey(p) ? deviceArt(artKey(p)) : icon(p.cat === 'other' ? (p.icon || 'box') : 'box')}</span><span class="t" data-a="open" data-v="${esc(p.id)}" role="button" tabindex="0">${esc(tx(p.name)) || L('منتج بلا اسم', 'Unnamed product')}</span><span class="tag">${esc(CATS[p.cat]?.[LANG === 'ar' ? 0 : 1] || p.cat)}</span>${p.on === false ? `<span class="tag off">${L('مخفي', 'Hidden')}</span>` : ''}${listOps('products', i, C.products.length)}</div>
         ${open ? `<div class="grid2">${fSel(`${base}.cat`, L('القسم', 'Section'), Object.entries(CATS).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]))}
           ${p.cat === 'lighting' ? fSel(`${base}.fixture`, L('نوع الإضاءة في المشهد', 'Light type in the scene'), Object.entries(FIXTURES).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]), false) : ''}
           ${p.cat === 'mixpad' ? fSel(`${base}.model`, L('شكل اللوحة', 'Panel shape'), [['x', L('كبيرة أفقية', 'Large landscape')], ['7', L('متوسطة', 'Medium')], ['mini', L('مربعة صغيرة', 'Small square')]], false) : ''}
           ${p.cat === 'lock' ? fSel(`${base}.model`, L('طرق الفتح', 'Unlock methods'), [['face', L('مع التعرّف على الوجه', 'With face recognition')], ['finger', L('بصمة ورمز وبطاقة', 'Fingerprint, code, card')]], false) : ''}
+          ${p.cat === 'climate' ? fSel(`${base}.model`, L('نوع الجهاز', 'Device type'), [['ac', L('وحدة تحكم بالمكيّف', 'AC controller')], ['ir', L('ريموت ذكي', 'Smart IR remote')]], true) : ''}
           ${p.cat === 'other' ? iconSel(`${base}.icon`, L('الأيقونة', 'Icon')) : ''}</div>
           ${fBi(`${base}.name`, L('الاسم', 'Name'))}${fBi(`${base}.desc`, L('الوصف', 'Description'), 3)}${fBi(`${base}.specs`, L('المواصفات — سطر لكل ميزة', 'Specifications — one per line'), 4)}
-          <div class="fld"><span>${L('الصورة (اختيارية)', 'Photo (optional)')}</span><div class="imgs">${safeUrl(p.img) ? `<figure><img src="${esc(safeUrl(p.img))}" alt=""><div class="ops"><button data-a="rmimg" data-p="${base}.img" aria-label="${L('حذف الصورة', 'Remove photo')}">${icon('trash')}</button></div></figure>` : ''}<label class="upl">${icon('image')}<span>${L('ارفع صورة', 'Upload photo')}</span><input type="file" accept="image/*" hidden data-up="${base}.img"></label></div></div>
+          <div class="fld"><span>${L('صورة المنتج (اختيارية — بدونها يظهر رسم واقعي للجهاز)', 'Product photo (optional — without one, a realistic drawing of the device is shown)')}</span><div class="imgs">${safeUrl(p.img) ? `<figure><img src="${esc(safeUrl(p.img))}" alt=""><div class="ops"><button data-a="rmimg" data-p="${base}.img" aria-label="${L('حذف الصورة', 'Remove photo')}">${icon('trash')}</button></div></figure>` : ''}<label class="upl">${icon('image')}<span>${L('ارفع صورة', 'Upload photo')}</span><input type="file" accept="image/*" hidden data-up="${base}.img"></label></div></div>
           ${fSw(`${base}.on`, L('ظاهر في الموقع', 'Visible on the site'))}` : ''}</div>`; }).join('')}
       <button class="add" data-a="add" data-v="product">${icon('plus')} ${L('أضف منتجاً', 'Add a product')}</button>`;
   },
@@ -94,6 +97,85 @@ const AREAS = {
     <div class="box"><h2>${L('إعادة المحتوى الافتراضي', 'Back to the default content')}</h2><p class="hint">${L('يمسح كل التعديلات ويعيد النصوص والمنتجات الأصلية. لا يُطبّق إلا بعد الضغط على «حفظ».', 'Replaces all edits with the original texts and products. Takes effect only after you press “Save”.')}</p>
       ${pendingDel === 'reset' ? `<div class="confirm"><b>${L('متأكد؟', 'Are you sure?')}</b><button class="btn" data-a="reset" style="border-color:var(--bad);color:var(--bad)">${L('نعم، أعد الافتراضي', 'Yes, restore defaults')}</button><button class="btn" data-a="cancel">${L('إلغاء', 'Cancel')}</button></div>` : `<div><button class="btn" data-a="askreset">${L('إعادة الافتراضي', 'Restore defaults')}</button></div>`}</div>`,
 };
+
+// ---------- scene photos: upload a photo and place the lights and devices on it ----------
+const SCN = { hero: ['الواجهة الرئيسية', 'Hero'], lighting: ['الإضاءة', 'Lighting'], mixpad: ['MixPad (غرفة النوم)', 'MixPad (bedroom)'], lock: ['القفل وباب المدخل', 'Lock & front door'], curtain: ['الستائر', 'Curtains'], climate: ['التكييف', 'Climate'], remote: ['الهاتف (الصالة)', 'Phone (living room)'], cri: ['جودة اللون', 'Colour quality'] };
+const ZT = { light: ['مصباح', 'Light', '#ffcf5a'], line: ['خط إضاءة', 'LED line', '#ffa94d'], area: ['خطوط ظاهرة في الصورة', 'Lines visible in the photo', '#ff7ad9'], window: ['نافذة بستارة', 'Window with curtain', '#5ac8ff'], tv: ['تلفزيون', 'TV', '#9b8cff'], ac: ['مكيّف', 'AC unit', '#5affc8'], door: ['باب', 'Door', '#ff8a5a'], lock: ['القفل على الباب', 'Lock on the door', '#ff5a5a'], panel: ['شاشة على الحائط', 'Wall screen', '#c8ff5a'] };
+const ZHINT = { light: ['اضغط على مكان المصباح، ثم اضغط حيث يقع ضوؤه.', 'Click where the lamp is, then click where its light lands.'], line: ['اضغط على بداية الخط ثم نهايته.', 'Click the start of the line, then its end.'], rect: ['اسحب مستطيلاً فوق المكان.', 'Drag a rectangle over it.'] };
+let scKey = 'lighting', zTool = null, zFix = 'down', zSel = -1, zTmp = null;
+const scene = () => { C.scenes = C.scenes || {}; if (!C.scenes[scKey]) C.scenes[scKey] = clone(DEFAULT_CONTENT.scenes[scKey]); const s = C.scenes[scKey]; s.zones = s.zones || []; return s; };
+const zName = z => `${L(...ZT[z.t].slice(0, 2))}${z.f ? ' · ' + L(...FIXTURES[z.f]) : ''}`;
+function zSvg(sc) {
+  const z = sc.zones || [], col = t => ZT[t]?.[2] || '#fff';
+  return z.map((q, i) => { const on = i === zSel ? ' sel' : '', c = col(q.t);
+    if (q.t === 'light') return `<g class="zz${on}"><line x1="${q.p[0]}" y1="${q.p[1]}" x2="${(q.a || q.p)[0]}" y2="${(q.a || q.p)[1]}" stroke="${c}" stroke-dasharray="1 1" vector-effect="non-scaling-stroke"/>${q.a ? `<ellipse cx="${q.a[0]}" cy="${q.a[1]}" rx="${(q.r || 10) * 0.6}" ry="${(q.r || 10) * 0.4}" fill="${c}" fill-opacity=".18" stroke="${c}" vector-effect="non-scaling-stroke"/>` : ''}</g>`;
+    if (q.t === 'line') return `<line class="zz${on}" x1="${q.p[0]}" y1="${q.p[1]}" x2="${q.p[2]}" y2="${q.p[3]}" stroke="${c}" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
+    return `<rect class="zz${on}" x="${q.p[0]}" y="${q.p[1]}" width="${q.p[2]}" height="${q.p[3]}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-dasharray="${q.t === 'area' ? '2 1' : '0'}" vector-effect="non-scaling-stroke"/>`; }).join('')
+    + (zTmp ? (zTmp.rect ? `<rect x="${zTmp.rect[0]}" y="${zTmp.rect[1]}" width="${zTmp.rect[2]}" height="${zTmp.rect[3]}" fill="#fff" fill-opacity=".15" stroke="#fff" vector-effect="non-scaling-stroke"/>` : `<circle cx="${zTmp.p[0]}" cy="${zTmp.p[1]}" r=".8" fill="#fff"/>`) : '');
+}
+function zHandles(sc) {
+  return (sc.zones || []).map((q, i) => { const h = (k, x, y, cls = '') => `<i class="zh ${cls} ${i === zSel ? 'sel' : ''}" data-zi="${i}" data-h="${k}" style="left:${x}%;top:${y}%;--c:${ZT[q.t]?.[2]}" title="${esc(zName(q))}"></i>`;
+    if (q.t === 'light') return h('p', ...q.p, 'pt') + (q.a ? h('a', ...q.a, 'aim') : '');
+    if (q.t === 'line') return h('p1', q.p[0], q.p[1], 'pt') + h('p2', q.p[2], q.p[3], 'pt');
+    return h('mv', q.p[0] + q.p[2] / 2, q.p[1] + q.p[3] / 2, 'mv') + h('sz', q.p[0] + q.p[2], q.p[1] + q.p[3], 'sz'); }).join('');
+}
+function zRefresh() { const sc = scene(), s = $('#zed svg'), h = $('#zed .zhs'); if (s) s.innerHTML = zSvg(sc); if (h) h.innerHTML = zHandles(sc); }
+function zRow(q, i) {
+  const base = `scenes.${scKey}.zones.${i}`, fx = Object.entries(FIXTURES).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]);
+  return `<div class="zrow ${i === zSel ? 'sel' : ''}"><i class="zdot" style="background:${ZT[q.t]?.[2]}"></i><button class="t" data-a="zsel" data-v="${i}">${esc(zName(q))}</button>
+    ${['light', 'line', 'area'].includes(q.t) ? fSel(`${base}.f`, L('يتحكم به', 'Controlled as'), fx, true) : ''}
+    ${q.t === 'light' || q.t === 'line' ? `<label class="fld sm"><span>${L('حجم الضوء', 'Light size')}</span><input type="range" min="2" max="40" step="0.5" data-p="${base}.r" data-num="1" value="${q.r || 10}"></label>` : ''}
+    ${q.t === 'light' ? `<button class="chip ${q.h ? 'on' : ''}" data-a="zhid" data-v="${i}">${L('مخفي في السقف', 'Hidden in ceiling')}</button>` : ''}
+    ${q.t === 'window' ? `<label class="fld sm"><span>${L('لون القماش', 'Fabric colour')}</span><input type="color" data-p="${base}.c" value="${esc(q.c || '#78706a')}"></label>${fSel(`${base}.m`, L('طريقة الإغلاق', 'Closes'), [['split', L('من الجانبين', 'From both sides')], ['left', L('من اليسار', 'From the left')], ['right', L('من اليمين', 'From the right')], ['blind', L('ستارة رول من الأعلى', 'Roller blind from the top')]], false)}` : ''}
+    ${q.t === 'door' ? fSel(`${base}.hinge`, L('المفصّلات', 'Hinges'), [['r', L('يمين', 'Right')], ['l', L('يسار', 'Left')]], false) : ''}
+    ${delBtn(`scenes.${scKey}.zones`, i)}</div>`;
+}
+AREAS.scenes = () => {
+  const sc = scene(), img = safeUrl(sc.img) || DEFAULT_CONTENT.scenes[scKey]?.img, isCri = scKey === 'cri';
+  const hint = zTool ? (zTool === 'light' ? ZHINT.light : zTool === 'line' ? ZHINT.line : ZHINT.rect) : null;
+  return `<div class="box"><p class="hint">${L('كل مشهد في الموقع صورة حقيقية تُضاء مباشرة. ارفع صورة من مشاريعك، ثم حدّد عليها أماكن الإضاءة والنوافذ والأجهزة. اسحب النقاط لتعديلها.', 'Every scene on the site is a real photo lit live. Upload a photo from your own projects, then mark where the lights, windows and devices are. Drag the dots to adjust them.')}</p>
+      <div class="chips">${Object.entries(SCN).map(([k, n]) => `<button class="chip ${scKey === k ? 'on' : ''}" data-a="zscene" data-v="${k}">${esc(n[LANG === 'ar' ? 0 : 1])}</button>`).join('')}</div></div>
+    <div class="box"><h2>${esc(L(...SCN[scKey]))}</h2>
+      <div class="row" style="margin-top:10px"><label class="btn">${icon('image')} ${L('استبدل الصورة', 'Replace the photo')}<input type="file" accept="image/*" hidden data-up="scenes.${scKey}.img"></label>
+        ${scKey === 'lock' ? `<label class="btn">${icon('door')} ${L('صورة الخارج خلف الباب', 'Photo seen through the open door')}<input type="file" accept="image/*" hidden data-up="scenes.lock.outside"></label>` : ''}
+        ${!isCri ? `<button class="btn" data-a="zclear">${L('امسح كل العلامات', 'Clear all marks')}</button>` : ''}<button class="btn" data-a="zreset">${L('الصورة والعلامات الأصلية', 'Original photo and marks')}</button></div>
+      ${isCri ? `<p class="hint">${L('اختر صورة بألوان غنية (فواكه، ورود، أقمشة). نصفها يظهر بإضاءة عادية ونصفها بإضاءة أورفيبو.', 'Choose a photo with rich colours (fruit, flowers, fabrics). Half of it is shown under ordinary light, half under ORVIBO light.')}</p><div class="zed"><img src="${esc(img)}" alt="" draggable="false"></div>` : `
+      <h3 style="margin:16px 0 8px">${L('أضف إلى الصورة', 'Add to the photo')}</h3>
+      <div class="row">${fSel('__zfix', L('نوع الإضاءة', 'Light type'), Object.entries(FIXTURES).map(([k, v]) => [k, v[LANG === 'ar' ? 0 : 1]]), false).replace('data-p="__zfix"', 'id="zfix"').replace(/<option value="([^"]+)" (selected)?/g, (m, v) => `<option value="${v}" ${v === zFix ? 'selected' : ''}`)}</div>
+      <div class="chips">${Object.keys(ZT).map(t => `<button class="chip ${zTool === t ? 'on' : ''}" data-a="ztool" data-v="${t}"><i class="zdot" style="background:${ZT[t][2]}"></i> ${esc(L(...ZT[t].slice(0, 2)))}</button>`).join('')}</div>
+      ${hint ? `<div class="banner">${esc(L(...hint))} <button class="chip" data-a="ztool" data-v="">${L('إلغاء', 'Cancel')}</button></div>` : ''}
+      <p class="hint">${L('«خطوط ظاهرة في الصورة»: ارسم مستطيلاً حول خطوط الإضاءة الظاهرة في السقف، فتتوهج الخطوط نفسها باللون الذي يختاره الزائر.', '“Lines visible in the photo”: draw a box around LED lines that are already in the photo, and those very lines glow in the colour the visitor picks.')}</p>
+      <div class="zed ${zTool ? 'placing' : ''}" id="zed"><img src="${esc(img)}" alt="" draggable="false"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${zSvg(sc)}</svg><div class="zhs">${zHandles(sc)}</div></div>
+      <div class="zlist">${sc.zones.map(zRow).join('') || `<p class="hint">${L('لا توجد علامات بعد.', 'No marks yet.')}</p>`}</div>`}</div>`;
+};
+// placing and dragging on the photo
+const zPt = e => { const r = $('#zed').getBoundingClientRect(); const c = (v, a, b) => Math.max(a, Math.min(b, v)); return [Math.round(c((e.clientX - r.left) / r.width * 100, 0, 100) * 10) / 10, Math.round(c((e.clientY - r.top) / r.height * 100, 0, 100) * 10) / 10]; };
+let zDrag = null;
+document.addEventListener('pointerdown', e => {
+  const zed = e.target.closest?.('#zed'); if (!zed || !$('#zed .zhs')) return; e.preventDefault();
+  const sc = scene(), pt = zPt(e), hd = e.target.closest('.zh');
+  if (hd && !zTool) { zSel = +hd.dataset.zi; const q = sc.zones[zSel]; zDrag = { q, h: hd.dataset.h, from: pt, orig: clone(q) }; zed.setPointerCapture?.(e.pointerId); zRefresh(); return; }
+  if (!zTool) return;
+  if (['light', 'line'].includes(zTool)) {
+    if (!zTmp) { zTmp = { p: pt }; zRefresh(); return; }
+    const q = zTool === 'light' ? { t: 'light', f: zFix, p: zTmp.p, a: pt, r: 10 } : { t: 'line', f: zFix, p: [...zTmp.p, ...pt], r: 4 };
+    sc.zones.push(q); zSel = sc.zones.length - 1; zTmp = null; zTool = null; markDirty(); render(); return;
+  }
+  zTmp = { start: pt, rect: [pt[0], pt[1], 0, 0] }; zDrag = { make: true }; zed.setPointerCapture?.(e.pointerId);
+});
+document.addEventListener('pointermove', e => {
+  if (!zDrag || !$('#zed')) return; const pt = zPt(e), r1 = v => Math.round(v * 10) / 10;
+  if (zDrag.make) { const [x0, y0] = zTmp.start; zTmp.rect = [Math.min(x0, pt[0]), Math.min(y0, pt[1]), r1(Math.abs(pt[0] - x0)), r1(Math.abs(pt[1] - y0))]; zRefresh(); return; }
+  const { q, h, from, orig } = zDrag, dx = pt[0] - from[0], dy = pt[1] - from[1];
+  if (h === 'p' || h === 'a') { q[h] = pt; } else if (h === 'p1') { q.p[0] = pt[0]; q.p[1] = pt[1]; } else if (h === 'p2') { q.p[2] = pt[0]; q.p[3] = pt[1]; }
+  else if (h === 'mv') { q.p[0] = r1(orig.p[0] + dx); q.p[1] = r1(orig.p[1] + dy); } else if (h === 'sz') { q.p[2] = r1(Math.max(0.5, orig.p[2] + dx)); q.p[3] = r1(Math.max(0.5, orig.p[3] + dy)); }
+  zRefresh();
+});
+document.addEventListener('pointerup', () => {
+  if (!zDrag) return; const d = zDrag; zDrag = null;
+  if (d.make) { const r = zTmp.rect; zTmp = null; if (r[2] > 0.5 && r[3] > 0.5) { const q = { t: zTool, p: r }; if (zTool === 'area') { q.f = 'strip'; q.th = 235; } if (zTool === 'window') { q.c = '#78706a'; q.m = 'split'; } if (zTool === 'door') q.hinge = 'r'; scene().zones.push(q); zSel = scene().zones.length - 1; zTool = null; markDirty(); render(); } else zRefresh(); return; }
+  markDirty(); render();
+});
 
 // ---------- screens ----------
 function renderLogin(msg = '') {
@@ -129,6 +211,12 @@ const NEW = {
   project: () => { const id = uid('pr_'); C.projects.unshift({ id, on: true, sample: false, title: { ar: '', en: '' }, place: { ar: '', en: '' }, type: { ar: '', en: '' }, year: String(new Date().getFullYear()), desc: { ar: '', en: '' }, devices: { ar: '', en: '' }, images: [] }); openItems.add(id); },
 };
 const ACT = {
+  zscene: v => { scKey = v; zTool = null; zTmp = null; zSel = -1; render(); },
+  ztool: v => { zTool = v || null; zTmp = null; const f = $('#zfix'); if (f) zFix = f.value; render(); },
+  zsel: v => { zSel = +v; render(); },
+  zhid: v => { const q = scene().zones[+v]; q.h = q.h ? 0 : 1; markDirty(); render(); },
+  zclear: () => { scene().zones = []; zSel = -1; markDirty(); render(); },
+  zreset: () => { C.scenes[scKey] = clone(DEFAULT_CONTENT.scenes[scKey]); zSel = -1; markDirty(); render(); toast(L('أُعيدت الصورة الأصلية — اضغط «حفظ»', 'Original restored — press “Save”')); },
   tab: v => { tab = v; pendingDel = null; $('#side')?.classList.remove('open'); render(); scrollTo(0, 0); },
   menu: () => $('#side')?.classList.toggle('open'),
   lang: () => { LANG = LANG === 'ar' ? 'en' : 'ar'; try { localStorage.setItem('dh-admin-lang', LANG); } catch (e) { /* ignore */ } applyChrome(); auth?.user ? render() : renderLogin(); },
@@ -157,11 +245,12 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[role=button][data-a]')) { e.preventDefault(); e.target.click(); } if ((e.ctrlKey || e.metaKey) && e.key === 's' && auth?.user) { e.preventDefault(); ACT.save(); } });
 document.addEventListener('input', e => {
   const p = e.target.dataset?.p; if (!p || e.target.tagName === 'SELECT') return;
-  setP(p, e.target.value); markDirty();
+  setP(p, e.target.dataset.num ? +e.target.value : e.target.value); markDirty(); if (p.startsWith('scenes.')) zRefresh();
   if (p === 'brand.accent') document.documentElement.style.setProperty('--accent', e.target.value);
 });
 document.addEventListener('change', async e => {
   const t = e.target, p = t.dataset?.p;
+  if (t.id === 'zfix') { zFix = t.value; return; }
   if (p && t.tagName === 'SELECT') { const v = t.value; setP(p, /^\d+$/.test(v) && /cells\.\d+\.0$/.test(p) ? +v : v); markDirty(); if (t.dataset.re) render(); return; }
   if (t.dataset?.up) {
     const path = t.dataset.up, files = [...t.files]; if (!files.length) return;

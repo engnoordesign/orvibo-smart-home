@@ -2,11 +2,6 @@
 // saved version replaces this file's content for every visitor.
 const t = (ar, en) => ({ ar, en });
 
-// a simple illustrated cover for the example projects (an SVG, so the page has no external images)
-const cover = (sky1, sky2, house) => 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky1}"/><stop offset="1" stop-color="${sky2}"/></linearGradient><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd9a0" stop-opacity=".95"/><stop offset="1" stop-color="#ff9e45" stop-opacity=".7"/></linearGradient></defs><rect width="640" height="400" fill="url(#s)"/><rect y="300" width="640" height="100" fill="#20252c"/>${house}</svg>`);
-const villa = cover('#1b2a44', '#3b4f72', '<rect x="140" y="170" width="360" height="140" fill="#e9e3d8"/><rect x="110" y="150" width="420" height="22" fill="#2b2f35"/><rect x="180" y="200" width="90" height="70" fill="url(#g)"/><rect x="300" y="200" width="60" height="110" fill="#4a3a2c"/><rect x="390" y="200" width="80" height="70" fill="url(#g)"/><rect x="0" y="300" width="640" height="6" fill="#ffd9a0" opacity=".5"/>');
-const flat = cover('#0f1626', '#26334d', '<rect x="210" y="60" width="220" height="250" fill="#d9d4cb"/>' + [0, 1, 2, 3, 4].map(r => [0, 1, 2].map(c => `<rect x="${232 + c * 66}" y="${80 + r * 44}" width="42" height="28" fill="${(r + c) % 3 ? 'url(#g)' : '#36404f'}"/>`).join('')).join(''));
-const office = cover('#203047', '#7d8ea6', '<rect x="90" y="140" width="460" height="170" fill="#cfd6df"/><rect x="90" y="140" width="460" height="10" fill="#2b2f35"/>' + [0, 1, 2, 3, 4, 5].map(c => `<rect x="${110 + c * 72}" y="170" width="56" height="110" fill="url(#g)" opacity=".85"/>`).join(''));
 
 export const DEFAULT_CONTENT = {
   v: 1,
@@ -64,7 +59,7 @@ export const DEFAULT_CONTENT = {
     mixpad: { title: t('لوحات MixPad', 'MixPad panels'), sub: t('اللوحة على الحائط هي عقل البيت. جرّب الشاشة: كل ضغطة تتحكم بالغرفة المجاورة.', 'The panel on the wall is the brain of the home. Try the screen: every tap controls the room next to it.') },
     lock: { title: t('القفل الذكي', 'The smart lock'), sub: t('افتح الباب بالبصمة أو الوجه أو الرمز أو البطاقة، أو من الهاتف لزائر عند الباب.', 'Open with fingerprint, face, code or card — or from your phone for a visitor at the door.') },
     curtain: { title: t('الستائر الذكية', 'Smart curtains'), sub: t('محرك هادئ يفتح ويغلق بأي نسبة، ويتبع الشروق والغروب.', 'A quiet motor that opens to any position and follows sunrise and sunset.') },
-    climate: { title: t('التكييف والتلفزيون', 'Climate & TV'), sub: t('شغّل المكيّف وغيّر الوضع والسرعة، وتحكّم بالتلفزيون من الريموت الذكي.', 'Run the AC, change mode and speed, and control the TV through the smart remote.') },
+    climate: { title: t('التكييف الذكي', 'Smart climate'), sub: t('شغّل المكيّف وغيّر الوضع والسرعة، وشاهد الهواء يخرج وحرارة الغرفة تنخفض أمامك.', 'Run the AC, change mode and fan speed, and watch the air flow and the room cool down in front of you.') },
     remote: { title: t('التحكم من الهاتف', 'Control from your phone'), sub: t('البيت كله في جيبك: الإضاءة والستائر والتكييف والتلفزيون والمشاهد، من أي مكان.', 'The whole home in your pocket: lights, curtains, climate, TV and scenes, from anywhere.') },
     catalog: { title: t('منتجات أخرى', 'More products'), sub: t('حساسات وكاميرات ومفاتيح تكمل المنظومة.', 'Sensors, cameras and switches that complete the system.') },
     projects: { title: t('أعمالنا', 'Our work'), sub: t('أماكن نفّذت فيها ديجيتال هوم منظومة أورفيبو.', 'Places where Digital Home has installed ORVIBO.') },
@@ -80,6 +75,60 @@ export const DEFAULT_CONTENT = {
     ],
     note: t('الصورة محاكاة توضيحية للفرق، والأرقام قيم نموذجية. تُرجى مراجعة مواصفات كل منتج.', 'The picture is an illustration of the difference and the figures are typical values. Check each product’s data sheet.'),
   },
+  // the real photos behind every live scene, and where each light, window, TV, AC and door sits in them (in % of the photo)
+  scenes: {
+    hero: { img: 'img/living-led.jpg', zones: [
+      { t: 'area', f: 'strip', p: [10, 0, 66, 42], th: 235 },
+      { t: 'tv', p: [54.2, 43.6, 9.7, 10.9] },
+      { t: 'light', f: 'down', p: [30, 4], a: [30, 64], r: 22, h: 1 }, { t: 'light', f: 'down', p: [68, 4], a: [66, 66], r: 22, h: 1 },
+      { t: 'light', f: 'washer', k: 'wash', p: [9, 22], a: [9, 50], r: 12, h: 1 }, { t: 'light', f: 'washer', k: 'wash', p: [83, 22], a: [83, 50], r: 12, h: 1 },
+    ] },
+    lighting: { img: 'img/living-loft.jpg', zones: [
+      { t: 'light', f: 'washer', k: 'wash', p: [5, 13], a: [6, 40], r: 14 }, { t: 'light', f: 'washer', k: 'wash', p: [11, 34], a: [12, 52], r: 11 },
+      { t: 'light', f: 'track', p: [27, 2.5], a: [19, 42], r: 9 }, { t: 'light', f: 'track', p: [25, 12.5], a: [16, 52], r: 8 }, { t: 'light', f: 'track', p: [23.5, 19.5], a: [33, 52], r: 9 },
+      { t: 'light', f: 'pendant', p: [55.5, 39], a: [57, 60], r: 7 }, { t: 'light', f: 'pendant', p: [58.7, 37.8], a: [59, 60], r: 7 }, { t: 'light', f: 'pendant', p: [62.3, 36.6], a: [62, 60], r: 7 },
+      { t: 'light', f: 'spot', p: [51, 20], a: [51, 48], r: 7, h: 1 },
+      { t: 'light', f: 'down', p: [38, 6], a: [40, 74], r: 20, h: 1 }, { t: 'light', f: 'down', p: [82, 6], a: [80, 82], r: 16, h: 1 },
+      { t: 'line', f: 'strip', p: [27.6, 40.8, 46.2, 40.8], r: 4 },
+      { t: 'tv', p: [27.8, 46, 15.8, 13.3] },
+    ] },
+    mixpad: { img: 'img/bedroom-track.jpg', zones: [
+      ...[[26.6, 20.5], [39.5, 26.2], [49.5, 28.5], [53.8, 26.6], [59.8, 22.6], [67.3, 17.6], [76.6, 11.8]].map(([x, y]) => ({ t: 'light', f: 'track', p: [x, y], a: [x + 1, Math.min(92, y + 42)], r: 8 })),
+      { t: 'light', f: 'pendant', p: [96, 4], a: [93, 30], r: 9 }, { t: 'light', f: 'pendant', p: [97, 32], a: [94, 52], r: 9 }, { t: 'light', f: 'pendant', p: [96, 61], a: [94, 80], r: 9 },
+      { t: 'line', f: 'strip', p: [57, 55.6, 66.6, 55.6], r: 3 }, { t: 'line', f: 'strip', p: [0, 56.6, 10.5, 55.2], r: 3 },
+      { t: 'light', f: 'washer', k: 'wash', p: [14.5, 50], a: [18, 62], r: 8 },
+      { t: 'light', f: 'down', p: [35, 5], a: [38, 72], r: 18, h: 1 }, { t: 'light', f: 'down', p: [60, 3], a: [62, 72], r: 16, h: 1 },
+      { t: 'tv', p: [57, 43.6, 9.3, 10] },
+      { t: 'window', p: [23.5, 21.5, 28.5, 41], c: '#6b6661' }, { t: 'window', p: [75, 9, 21, 72], c: '#6b6661' },
+      { t: 'panel', p: [2.6, 39, 5.2, 7.4] },
+    ] },
+    lock: { img: 'img/entry.jpg', outside: 'img/entrance-outside.jpg', zones: [
+      { t: 'door', p: [57.2, 27, 15.2, 57], hinge: 'r' },
+      { t: 'lock', p: [57.3, 37, 5.4, 27.5] },
+      { t: 'panel', p: [49.6, 39, 4.2, 5.2] },
+    ] },
+    curtain: { img: 'img/bedroom-window.jpg', zones: [
+      { t: 'window', p: [11.5, 6.5, 33.5, 66], c: '#6f5546' },
+      { t: 'light', f: 'pendant', p: [45, 9], a: [48, 62], r: 22 },
+      { t: 'light', f: 'washer', k: 'wash', p: [64.5, 31], a: [64.5, 45], r: 9 },
+      { t: 'light', f: 'down', p: [70, 3], a: [65, 70], r: 18, h: 1 },
+    ] },
+    climate: { img: 'img/bedroom-ac.jpg', zones: [
+      { t: 'ac', p: [17.8, 19.6, 12.6, 6.8] },
+      { t: 'area', f: 'strip', p: [0, 0, 45, 19], th: 235 }, { t: 'area', f: 'strip', p: [45, 0, 27, 14], th: 235 },
+      { t: 'light', f: 'washer', k: 'lamp', p: [83.5, 30], a: [83, 60], r: 16 },
+      { t: 'window', p: [45, 13.5, 28, 57], c: '#d4c6b2' },
+      { t: 'light', f: 'down', p: [55, 4], a: [55, 70], r: 20, h: 1 },
+    ] },
+    remote: { img: 'img/living-sunny.jpg', zones: [
+      { t: 'light', f: 'down', k: 'pendant', p: [41.5, 26.5], a: [44, 72], r: 24 },
+      { t: 'light', f: 'pendant', p: [26.2, 44.5], a: [27, 62], r: 10 },
+      { t: 'light', f: 'washer', k: 'lamp', p: [47.5, 53], a: [47, 62], r: 8 }, { t: 'light', f: 'washer', k: 'lamp', p: [76.6, 52.5], a: [76, 62], r: 9 },
+      { t: 'light', f: 'spot', p: [61, 8], a: [61, 44], r: 8, h: 1 },
+      { t: 'window', p: [40.5, 38.5, 6.6, 19.5], c: '#e9e3d6', m: 'blind' },
+    ] },
+    cri: { img: 'img/still-life.jpg' },
+  },
   products: [
     { id: 'p_down', cat: 'lighting', fixture: 'down', on: true, name: t('سبوت لايت مدمج SOPRO', 'SOPRO recessed downlight'), desc: t('إضاءة عامة ناعمة من السقف، تتدرّج من خافتة إلى كاملة ومن الأبيض الدافئ إلى البارد.', 'Soft general light from the ceiling, dimming from a glow to full and from warm to cool white.'), specs: t('التعتيم: 1–100%\nلون الأبيض: 2700–6500 كلفن\nالتركيب: مدمج في السقف', 'Dimming: 1–100 %\nWhite: 2700–6500 K\nMounting: recessed ceiling'), img: '' },
     { id: 'p_spot', cat: 'lighting', fixture: 'spot', on: true, name: t('سبوت موجّه', 'Adjustable accent spot'), desc: t('حزمة ضيقة تُبرز اللوحات والقطع الفنية وتعطي المكان عمقاً.', 'A narrow beam that brings out artwork and gives the room depth.'), specs: t('زاوية ضيقة قابلة للتوجيه\nقابل للتعتيم وتغيير لون الأبيض', 'Narrow, adjustable beam\nDimmable, tunable white'), img: '' },
@@ -93,8 +142,8 @@ export const DEFAULT_CONTENT = {
     { id: 'p_lockf', cat: 'lock', model: 'face', on: true, name: t('القفل الذكي بالتعرّف على الوجه', 'Face-recognition smart lock'), desc: t('يفتح بالوجه أو البصمة أو الرمز أو البطاقة أو التطبيق، مع جرس فيديو.', 'Opens by face, fingerprint, code, card or the app, with a video doorbell.'), specs: t('وجه، بصمة، رمز، بطاقة، تطبيق\nسجل دخول وتنبيهات\nإنذار عند العبث', 'Face, fingerprint, code, card, app\nEntry history and alerts\nTamper alarm'), img: '' },
     { id: 'p_lockp', cat: 'lock', model: 'finger', on: true, name: t('القفل الذكي بالبصمة', 'Fingerprint smart lock'), desc: t('قفل أنيق بالبصمة والرمز والبطاقة، ورموز مؤقتة للزوار.', 'A sleek lock with fingerprint, code and card, plus one-time codes for visitors.'), specs: t('بصمة، رمز، بطاقة، تطبيق\nرموز مؤقتة للزوار', 'Fingerprint, code, card, app\nOne-time visitor codes'), img: '' },
     { id: 'p_curtain', cat: 'curtain', on: true, name: t('محرك الستائر الذكي', 'Smart curtain motor'), desc: t('يفتح ويغلق بأي نسبة بهدوء، ويبدأ بسحبة خفيفة باليد.', 'Opens and closes quietly to any position, and starts with a light pull by hand.'), specs: t('تحكم بالنسبة المئوية\nجدولة مع الشروق والغروب\nيعمل مع المشاهد', 'Percentage control\nSunrise and sunset schedules\nWorks with scenes'), img: '' },
-    { id: 'p_ac', cat: 'climate', on: true, name: t('وحدة التحكم بالمكيّف', 'AC controller'), desc: t('تحكم بالمكيّفات المركزية والسبليت: الوضع ودرجة الحرارة وسرعة المروحة.', 'Controls central and split AC units: mode, temperature and fan speed.'), specs: t('تبريد، تدفئة، تجفيف، مروحة\nجدولة وتوفير طاقة', 'Cool, heat, dry, fan\nSchedules and energy saving'), img: '' },
-    { id: 'p_ir', cat: 'climate', on: true, name: t('الريموت الذكي (أشعة تحت حمراء)', 'Smart IR remote'), desc: t('يحوّل التلفزيون والمكيّف وأي جهاز بريموت إلى جهاز ذكي.', 'Turns the TV, the AC and anything with a remote into a smart device.'), specs: t('يتعلّم أوامر الريموت\nيدخل في المشاهد', 'Learns remote commands\nJoins scenes'), img: '' },
+    { id: 'p_ac', cat: 'climate', model: 'ac', on: true, name: t('وحدة التحكم بالمكيّف', 'AC controller'), desc: t('تحكم بالمكيّفات المركزية والسبليت: الوضع ودرجة الحرارة وسرعة المروحة.', 'Controls central and split AC units: mode, temperature and fan speed.'), specs: t('تبريد، تدفئة، تجفيف، مروحة\nجدولة وتوفير طاقة', 'Cool, heat, dry, fan\nSchedules and energy saving'), img: '' },
+    { id: 'p_ir', cat: 'climate', model: 'ir', on: true, name: t('الريموت الذكي (أشعة تحت حمراء)', 'Smart IR remote'), desc: t('يحوّل التلفزيون والمكيّف وأي جهاز بريموت إلى جهاز ذكي.', 'Turns the TV, the AC and anything with a remote into a smart device.'), specs: t('يتعلّم أوامر الريموت\nيدخل في المشاهد', 'Learns remote commands\nJoins scenes'), img: '' },
     { id: 'p_app', cat: 'remote', on: true, name: t('تطبيق أورفيبو هوم', 'ORVIBO Home app'), desc: t('تحكم بكل البيت من أي مكان، وتلقَّ التنبيهات فوراً.', 'Control the whole home from anywhere and get alerts instantly.'), specs: t('iOS و Android\nمشاهد وأتمتة\nتنبيهات فورية', 'iOS and Android\nScenes and automation\nInstant alerts'), img: '' },
     { id: 'p_switch', cat: 'other', icon: 'switch', on: true, name: t('مفاتيح MixSwitch', 'MixSwitch switches'), desc: t('شكل المفتاح الأنيق، وكل زر يتحكم بمصباح أو مجموعة أو مشهد.', 'A premium switch where each key drives a lamp, a group or a scene.'), specs: t('1 أو 2 أو 3 أزرار\nأزرار مشاهد', '1, 2 or 3 keys\nScene keys'), img: '' },
     { id: 'p_presence', cat: 'other', icon: 'presence', on: true, name: t('حساس الحضور', 'Presence sensor'), desc: t('يعرف أن في الغرفة أحداً حتى لو كان جالساً بلا حركة.', 'Knows someone is in the room even when they sit still.'), specs: t('كشف حضور دقيق\nإضاءة وتكييف تلقائي', 'Accurate presence detection\nAutomatic lights and climate'), img: '' },
@@ -105,13 +154,13 @@ export const DEFAULT_CONTENT = {
     { id: 'p_sos', cat: 'other', icon: 'sos', on: true, name: t('زر الطوارئ', 'Emergency button'), desc: t('ضغطة واحدة تنبّه العائلة وتضيء البيت.', 'One press alerts the family and lights up the home.'), specs: t('تنبيه فوري\nمناسب لكبار السن', 'Instant alert\nIdeal for the elderly'), img: '' },
   ],
   projects: [
-    { id: 'pr1', sample: true, on: true, title: t('فيلا سكنية — مثال', 'Family villa — example'), place: t('المدينة', 'City'), type: t('فيلا', 'Villa'), year: '2025', desc: t('مشروع توضيحي: استبدله بأعمالك من لوحة الإدارة. إضاءة كاملة بمشاهد، ستائر ذكية، أقفال وكاميرات، ولوحات MixPad في الطوابق.', 'Example project — replace it with your own work in the admin panel. Full scene lighting, smart curtains, locks and cameras, and MixPad panels on every floor.'), devices: t('MixPad X، إضاءة SOPRO، محركات ستائر، قفل ذكي، كاميرات', 'MixPad X, SOPRO lighting, curtain motors, smart lock, cameras'), images: [villa] },
-    { id: 'pr2', sample: true, on: true, title: t('شقة حديثة — مثال', 'Modern apartment — example'), place: t('المدينة', 'City'), type: t('شقة', 'Apartment'), year: '2025', desc: t('مشروع توضيحي: شقة بتحكم كامل من الهاتف وإضاءة مخفية ملوّنة وحساسات حضور.', 'Example project: an apartment fully controlled from the phone, with colour strips and presence sensors.'), devices: t('MixPad 7، شادو لاين، حساسات حضور، ريموت ذكي', 'MixPad 7, shadow-line strips, presence sensors, smart remote'), images: [flat] },
-    { id: 'pr3', sample: true, on: true, title: t('مكتب إداري — مثال', 'Office — example'), place: t('المدينة', 'City'), type: t('مكتب', 'Office'), year: '2024', desc: t('مشروع توضيحي: مكتب يطفئ الإضاءة والتكييف في الغرف الفارغة ويوفّر الطاقة.', 'Example project: an office that switches off lights and AC in empty rooms to save energy.'), devices: t('حساسات حضور، تحكم بالتكييف، مفاتيح MixSwitch', 'Presence sensors, AC control, MixSwitch'), images: [office] },
+    { id: 'pr1', sample: true, on: true, title: t('فيلا سكنية — مثال', 'Family villa — example'), place: t('المدينة', 'City'), type: t('فيلا', 'Villa'), year: '2025', desc: t('مشروع توضيحي: استبدله بأعمالك من لوحة الإدارة. إضاءة كاملة بمشاهد، ستائر ذكية، أقفال وكاميرات، ولوحات MixPad في الطوابق.', 'Example project — replace it with your own work in the admin panel. Full scene lighting, smart curtains, locks and cameras, and MixPad panels on every floor.'), devices: t('MixPad X، إضاءة SOPRO، محركات ستائر، قفل ذكي، كاميرات', 'MixPad X, SOPRO lighting, curtain motors, smart lock, cameras'), images: ['img/project-villa.jpg'] },
+    { id: 'pr2', sample: true, on: true, title: t('شقة حديثة — مثال', 'Modern apartment — example'), place: t('المدينة', 'City'), type: t('شقة', 'Apartment'), year: '2025', desc: t('مشروع توضيحي: شقة بتحكم كامل من الهاتف وإضاءة مخفية ملوّنة وحساسات حضور.', 'Example project: an apartment fully controlled from the phone, with colour strips and presence sensors.'), devices: t('MixPad 7، شادو لاين، حساسات حضور، ريموت ذكي', 'MixPad 7, shadow-line strips, presence sensors, smart remote'), images: ['img/project-apartment.jpg'] },
+    { id: 'pr3', sample: true, on: true, title: t('بنتهاوس — مثال', 'Penthouse — example'), place: t('المدينة', 'City'), type: t('بنتهاوس', 'Penthouse'), year: '2024', desc: t('مشروع توضيحي: إضاءة خطية بمشاهد، وستائر تتبع الشمس، وتكييف يتوقف في الغرف الفارغة لتوفير الطاقة.', 'Example project: linear scene lighting, curtains that follow the sun, and AC that stops in empty rooms to save energy.'), devices: t('حساسات حضور، تحكم بالتكييف، مفاتيح MixSwitch، شادو لاين', 'Presence sensors, AC control, MixSwitch, shadow-line strips'), images: ['img/project-penthouse.jpg'] },
   ],
 };
 
 // interface words (not managed in the admin panel)
 export const UI = {
-  nav: { about: t('من نحن', 'About'), orvibo: t('أورفيبو', 'ORVIBO'), lighting: t('الإضاءة', 'Lighting'), cri: t('جودة اللون', 'Colour quality'), mixpad: t('MixPad', 'MixPad'), lock: t('القفل', 'Lock'), curtain: t('الستائر', 'Curtains'), climate: t('التكييف والتلفزيون', 'Climate & TV'), remote: t('الهاتف', 'Phone'), catalog: t('منتجات أخرى', 'More'), projects: t('أعمالنا', 'Our work'), contact: t('تواصل', 'Contact') },
+  nav: { about: t('من نحن', 'About'), orvibo: t('أورفيبو', 'ORVIBO'), lighting: t('الإضاءة', 'Lighting'), cri: t('جودة اللون', 'Colour quality'), mixpad: t('MixPad', 'MixPad'), lock: t('القفل', 'Lock'), curtain: t('الستائر', 'Curtains'), climate: t('التكييف', 'Climate'), remote: t('الهاتف', 'Phone'), catalog: t('منتجات أخرى', 'More'), projects: t('أعمالنا', 'Our work'), contact: t('تواصل', 'Contact') },
 };

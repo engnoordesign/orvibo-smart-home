@@ -69,3 +69,23 @@ body.admin { font-size: 15px; }
   .menu-btn { display: grid; }
   .bi { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* scene photo editor */
+.zed { position: relative; border-radius: 12px; overflow: hidden; background: #111; user-select: none; touch-action: none; direction: ltr; }
+.zed img { display: block; width: 100%; height: auto; pointer-events: none; }
+.zed svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.zed .zz.sel { filter: drop-shadow(0 0 3px #fff); }
+.zed.placing { cursor: crosshair; }
+.zhs { position: absolute; inset: 0; }
+.zh { position: absolute; width: 14px; height: 14px; margin: -7px; border-radius: 50%; background: var(--c, #fff); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .6); cursor: grab; }
+.zh.aim { width: 10px; height: 10px; margin: -5px; background: transparent; border-color: var(--c); }
+.zh.mv { border-radius: 4px; } .zh.sz { width: 10px; height: 10px; margin: -5px; border-radius: 2px; cursor: nwse-resize; }
+.zh.sel { outline: 2px solid #fff; outline-offset: 2px; }
+.placing .zh { pointer-events: none; opacity: .5; }
+.zlist { display: grid; gap: 8px; margin-top: 10px; }
+.zrow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.zrow.sel { border-color: var(--accent); }
+.zrow .t { font-weight: 600; text-align: start; flex: 1 1 160px; align-self: center; }
+.zrow .fld { margin: 0; min-width: 130px; } .zrow .fld.sm input[type=range] { width: 130px; }
+.zdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: middle; flex: none; align-self: center; }
+.thumb svg.art { width: 100%; height: 100%; }

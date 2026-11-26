@@ -6,10 +6,18 @@ The company website of Digital Home, exclusive ORVIBO distributor, with a separa
 lighting collection → colour quality (ORVIBO Ra 95+ against an ordinary light) → MixPad panels →
 smart lock → curtains → climate & TV → phone control → more products → our work (projects) → contact.
 
-Every product section has a live picture that changes as the visitor uses the controls: lights
-fade and change colour, curtains slide, the TV plays, the AC blows, the door opens. In the colour
-quality section the visitor drags a line across one still life to compare the two kinds of light, and
-can switch on a "slow-motion camera" that shows flicker.
+Every product section is a **real photo of a real room, relit live** as the visitor uses the controls:
+lamps and LED lines fade and change colour, night falls, curtains slide across the window, the TV
+plays, the AC blows air and the room cools, the front door swings open onto the street. The controls
+sit right under the photo, and on phones the photo stays pinned at the top while the visitor scrolls
+the controls, so every change is seen as it happens. Tapping a lamp, the AC, the TV or the curtain in
+the photo works too. In the colour quality section the visitor drags a line across a real still life
+to compare ORVIBO light with an ordinary one, and can switch on a "slow-motion camera" that shows
+flicker.
+
+The ORVIBO devices (lock, MixPad panels, downlights, spots, track, strip, curtain motor, sensors…)
+are drawn in the style of the real products; upload the official product photo of any device in the
+admin panel and it replaces the drawing everywhere.
 
 Arabic and English, light and dark mode, phones to desktops.
 
@@ -21,6 +29,9 @@ Sign in with a username and password, then edit:
 - About us, the ORVIBO text, advantages and the comparison table
 - the colour-quality comparison (Ra values, labels, points)
 - which sections show and in what order, and every section title
+- **scene photos**: replace the photo of any scene with one from your own projects, then click on it to
+  place the lamps (and where their light lands), LED lines, windows with curtains, the TV, the AC, the
+  door, the lock and wall screens; drag the markers to adjust them
 - products: add, edit, hide, delete or reorder; name, description and specifications in both
   languages, a photo, and where the product appears in the live scenes
 - our work: projects with location, type, year, description, devices used and photos
@@ -58,7 +69,9 @@ npx wrangler secret put ADMIN_PASSWORD
 | Path | Purpose |
 | --- | --- |
 | `public/index.html`, `public/js/site.js` | The website |
-| `public/js/scenes.js` | The live pictures: room, front door, colour comparison |
+| `public/js/photo.js` | The live photo scenes: relighting, curtains, TV, AC, door, colour comparison |
+| `public/js/devices.js` | Drawings of the ORVIBO devices, used when no product photo is uploaded |
+| `public/img/` | The default room photos |
 | `public/js/content.js` | Default content (Arabic and English) |
 | `public/js/store.js` | Loads and saves content, photos and the admin sign-in |
 | `public/admin.html`, `public/js/admin.js` | The admin panel |
@@ -80,3 +93,5 @@ account and the edits are kept in that browser only.
 - The colour comparison is an illustration of the difference between high and ordinary colour
   rendering; the Ra values shown are editable.
 - The three projects in "Our work" are marked as examples; replace them with real ones.
+- The default room photos come from Pexels (free for commercial use, no attribution required). Replace
+  them with photos of your own projects from **Scene photos** in the admin panel.
