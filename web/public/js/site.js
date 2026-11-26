@@ -72,7 +72,8 @@ function sceneOf(id) {
 const NAV = s => tx(UI.nav[s.id]);
 const head = b => `<div class="shead"><h2>${esc(tx(b.title))}</h2>${tx(b.sub) ? `<p>${esc(tx(b.sub))}</p>` : ''}</div>`;
 const prods = cat => C.products.filter(p => p.cat === cat && p.on !== false);
-const thumb = (p, ic) => safeUrl(p.img) ? `<img src="${esc(safeUrl(p.img))}" alt="" loading="lazy">` : artKey(p) ? deviceArt(artKey(p)) : icon(ic || p.icon || 'bulb');
+const shape = "this.classList.add(this.naturalWidth/this.naturalHeight>1.7?'wide':this.naturalWidth/this.naturalHeight<.7?'tall':'std')";
+const thumb = (p, ic) => safeUrl(p.img) ? `<img class="pimg ${p.fit === 'cover' ? 'cover' : ''}" src="${esc(safeUrl(p.img))}" alt="${esc(tx(p.name))}" loading="lazy" onload="${shape}">` : artKey(p) ? deviceArt(artKey(p)) : icon(ic || p.icon || 'bulb');
 const pcard = (p, act, sel, ic) => `<button class="pc ${sel ? 'on' : ''}" data-a="${act}" data-v="${esc(p.id)}"><span class="thumb">${thumb(p, ic)}</span><b>${esc(tx(p.name))}</b><small>${esc(tx(p.desc))}</small></button>`;
 const pview = p => `<div class="pview">${thumb(p)}</div><h3>${esc(tx(p.name))}</h3><p class="desc">${esc(tx(p.desc))}</p>${specs(p)}`;
 const specs = p => lines(tx(p.specs)).length ? `<ul class="specs">${lines(tx(p.specs)).map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : '';
@@ -104,9 +105,9 @@ const SECTIONS = {
   curtain: () => demo('curtain', 'curtain', true),
   climate: () => demo('climate', 'climate'),
   remote: () => `<section class="section alt" id="remote"><div class="wrap">${head(C.blocks.remote)}<div class="phoneblk"><div class="phone"><div class="scr app" id="pn-remote"></div></div><div class="stage" id="st-remote"></div></div><div class="plist" style="margin-top:18px">${prods('remote').map(p => `<div class="card prow"><span class="thumb">${thumb(p, 'phone')}</span><div><h3>${esc(tx(p.name))}</h3><p>${esc(tx(p.desc))}</p>${specs(p)}</div></div>`).join('')}</div></div></section>`,
-  catalog: () => { const ps = prods('other'); if (!ps.length) return '';
-    const card = p => `<article class="prod"><div class="ph">${thumb(p, 'box')}</div><div class="in"><h3>${esc(tx(p.name))}</h3><p class="desc">${esc(tx(p.desc))}</p>${specs(p)}</div></article>`;
-    const G = C.groups || {}, keys = [...Object.keys(G).filter(g => ps.some(p => p.group === g)), ...(ps.some(p => !G[p.group]) ? ['_'] : [])];
+  catalog: () => { const ps = prods('other'); if (!ps.length) return ''; const G = C.groups || {};
+    const card = p => `<article class="prod pcard"><div class="ph">${thumb(p, 'box')}</div><div class="in">${G[p.group] ? `<span class="kind">${esc(tx(G[p.group]))}</span>` : ''}<h3>${esc(tx(p.name))}</h3><p class="desc">${esc(tx(p.desc))}</p>${specs(p)}</div></article>`;
+    const keys = [...Object.keys(G).filter(g => ps.some(p => p.group === g)), ...(ps.some(p => !G[p.group]) ? ['_'] : [])];
     return `<section class="section" id="catalog"><div class="wrap">${head(C.blocks.catalog)}
       ${keys.length > 1 ? `<div class="chips catchips">${keys.map(g => `<a class="chip" href="#cat-${g}">${esc(g === '_' ? L('أخرى', 'Other') : tx(G[g]))} <span class="num">${ps.filter(p => g === '_' ? !G[p.group] : p.group === g).length}</span></a>`).join('')}</div>` : ''}
       ${keys.map(g => `<div class="catgroup" id="cat-${g}">${keys.length > 1 ? `<h3 class="cath">${esc(g === '_' ? L('أخرى', 'Other') : tx(G[g]))}</h3>` : ''}<div class="grid3">${ps.filter(p => g === '_' ? !G[p.group] : p.group === g).map(card).join('')}</div></div>`).join('')}</div></section>`; },
