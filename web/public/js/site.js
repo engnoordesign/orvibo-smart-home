@@ -211,7 +211,7 @@ function dockMixpad() {
     <p class="desc">${L('اضغط على الشاشة أو على أي جهاز في الصورة.', 'Tap the screen, or any device in the photo.')}</p></div></div>`;
   wallPanel();
 }
-function wallPanel() { const st = R.mixpad?.st; if (!st) return; R.mixpad.panel(`<div class="wallmp"><b>${fmtT(st.time)}</b><span>${['down', 'track', 'pendant', 'strip'].map(f => `<i class="${st[f].on ? 'on' : ''}"></i>`).join('')}</span></div>`); }
+function wallPanel() { const st = R.mixpad?.st; if (!st) return; const html = `<div class="wallmp"><b>${fmtT(st.time)}</b><span>${['down', 'track', 'pendant', 'strip'].map(f => `<i class="${st[f].on ? 'on' : ''}"></i>`).join('')}</span></div>`; R.mixpad.panel(html); if (phRoom().key === 'mixpad' && R.remote) R.remote.panel(html); }
 function panelMixpad() {
   const p = mpProd(), host = $('#pn-mixpad'); if (!host) return;
   host.innerHTML = `${p ? pview(p) : ''}<div class="plist">${prods('mixpad').map(x => pcard(x, 'mpsel', x.id === p?.id, 'panel')).join('')}</div>`;
@@ -223,7 +223,7 @@ function mpAct(v) {
   else if (v === 'cur') r.set({ curtain: st.curtain > 50 ? 0 : 100 });
   else if (v === 'tv') r.set({ tv: { on: !st.tv.on } });
   else if (v === 'ch') r.set({ tv: { on: true, ch: (st.tv.ch + 1) % TV_CHANNELS.length } });
-  keep('mixpad', r); const d = $('#mpdev'); if (d) d.innerHTML = mpScreen(); wallPanel();
+  keep('mixpad', r); const d = $('#mpdev'); if (d) d.innerHTML = mpScreen(); wallPanel(); panelRemote();
 }
 
 // ---------- the smart lock ----------
@@ -240,10 +240,10 @@ function mountLock() {
 function intercom() {
   if (!R.lock) return; const out = sceneOf('lock').outside, cam = `<div class="icam" style="background-image:url('${esc(out)}')"><i class="who"></i><em>●</em></div>`, t = fmtT(new Date().getHours() + new Date().getMinutes() / 60);
   R.lock.panel(S.lock.guest ? cam : `<div class="wallmp"><b>${t}</b><span>${S.lock.locked ? '🔒' : '🔓'}</span></div>`);
-  const scr = R.lock.lock()?.querySelector('.lkscr');
-  if (scr) scr.innerHTML = S.lock.guest ? cam : !S.lock.locked ? `<div class="lkmsg ok">✓<small>${L('أهلاً', 'Welcome')}</small></div>` : `<div class="lkmsg"><small>${t}</small></div>`;
+  if (phRoom().key === 'lock' && R.remote && R.remote !== R.lock) R.remote.panel(S.lock.guest ? cam : `<div class="wallmp"><b>${t}</b><span>${S.lock.locked ? '🔒' : '🔓'}</span></div>`);
+  for (const scr of [R.lock.lock()?.querySelector('.lkscr'), phRoom().key === 'lock' ? R.remote?.lock()?.querySelector('.lkscr') : null]) if (scr) scr.innerHTML = S.lock.guest ? cam : !S.lock.locked ? `<div class="lkmsg ok">✓<small>${L('أهلاً', 'Welcome')}</small></div>` : `<div class="lkmsg"><small>${t}</small></div>`;
 }
-const lockFx = (cls, ms = 1200) => { const el = R.lock?.lock(); if (!el) return; el.classList.add(cls); clearTimeout(el['t' + cls]); el['t' + cls] = setTimeout(() => el.classList.remove(cls), ms); };
+const lockFx = (cls, ms = 1200) => { for (const el of [R.lock?.lock(), phRoom().key === 'lock' ? R.remote?.lock() : null]) { if (!el) continue; el.classList.add(cls); clearTimeout(el['t' + cls]); el['t' + cls] = setTimeout(() => el.classList.remove(cls), ms); } };
 const now = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
 function lockLog(ar, en) { S.lock.log.unshift({ t: now(), ar, en }); S.lock.log = S.lock.log.slice(0, 12); }
 function dockLock() {
@@ -354,44 +354,158 @@ function clAct(a, v) {
   keep('climate', r); dockClimate(); panelRemote();
 }
 
-// ---------- the phone: this living room, plus the other rooms on the page ----------
+// ---------- the phone: an app in the style of ORVIBO Home ----------
+// Home screen: rooms, scenes and device cards. Tapping a card opens that device's control screen at once;
+// the round button on a card switches it on or off without opening it. The photo beside the phone shows the
+// room chosen in the app, and every change also reaches that room's own section on the page.
+const ROOMS = [
+  { id: 'living', key: 'remote', n: ['الصالة', 'Living room'] },
+  { id: 'master', key: 'mixpad', n: ['غرفة النوم', 'Bedroom'] },
+  { id: 'guest', key: 'climate', n: ['غرفة الضيوف', 'Guest room'] },
+  { id: 'suite', key: 'curtain', n: ['الجناح', 'Suite'] },
+  { id: 'entry', key: 'lock', n: ['المدخل', 'Entrance'] },
+];
+const SCN_OF = { remote: 'remote', mixpad: 'mixpad', climate: 'climate', curtain: 'curtain', lock: 'lock' };
+const PH = { at: 'living', dev: null, enter: false };
+const phRoom = () => ROOMS.find(r => r.id === PH.at) || ROOMS[0];
+const roomState = key => key === 'remote' ? S.remote.room : (R[key] ? JSON.parse(JSON.stringify(R[key].st)) : S[key]?.room);
 function mountRemote() {
-  R.remote = makePhoto($('#st-remote'), { scene: sceneOf('remote'), label: L('الغرفة التي يتحكم بها الهاتف', 'The room controlled by the phone'), state: S.remote.room, onHot: h => rmAct(h === 'curtain' ? 'cur' : 't:' + h) });
-  cap($('#st-remote'), L('الصالة', 'Living room'));
+  const rm = phRoom(), host = $('#st-remote'); if (!host) return;
+  if (rm.key === 'lock') {
+    R.remote = makePhoto(host, { scene: { ...sceneOf('lock'), flat: true }, label: L(...rm.n), lockArt: () => realLock(lockModel()) });
+    R.remote.ready.then(() => { R.remote.door(!S.lock.locked); R.remote.guest(S.lock.guest); intercom(); });
+  } else {
+    R.remote = makePhoto(host, { scene: sceneOf(SCN_OF[rm.key]), label: L(...rm.n), state: roomState(rm.key),
+      onHot: h => phOpen(h === 'curtain' ? 'cur' : h === 'ac' ? 'ac' : h === 'tv' ? 'tv' : h === 'panel' ? null : 'l:' + h) });
+  }
+  cap(host, L(...rm.n));
   panelRemote();
 }
-function panelRemote() {
-  const r = R.remote, host = $('#pn-remote'); if (!host || !r) return; const st = r.st, fx = r.fixtures();
-  const on = fx.filter(f => st[f].on).length;
-  const t = (a, ic, n, s, isOn) => `<div class="t ${isOn ? 'on' : ''}">${icon(ic)}<b>${esc(n)}</b><small>${esc(s)}</small>${sw(isOn, 'rm', a, n)}</div>`;
-  const other = [
-    R.lock ? t('door', 'lock', L('باب المدخل', 'Front door'), S.lock.locked ? L('مقفل', 'Locked') : L('مفتوح', 'Open'), !S.lock.locked) : '',
-    R.climate ? t('bac', 'ac', L('مكيّف غرفة النوم', 'Bedroom AC'), R.climate.st.ac.on ? R.climate.st.ac.set + '°' : L('مطفأ', 'Off'), R.climate.st.ac.on) : '',
-    R.mixpad && R.mixpad.has('tv') ? t('btv', 'tv', L('تلفزيون غرفة النوم', 'Bedroom TV'), R.mixpad.st.tv.on ? L('يعمل', 'On') : L('مطفأ', 'Off'), R.mixpad.st.tv.on) : '',
-    R.curtain ? t('bcur', 'curtain', L('ستارة غرفة الضيوف', 'Guest room curtain'), R.curtain.st.curtain > 50 ? L('مغلقة', 'Closed') : L('مفتوحة', 'Open'), R.curtain.st.curtain < 50) : '',
-  ].join('');
-  host.innerHTML = `<h4>${L('منزلي', 'My home')}</h4>
-    <div class="env"><div><b class="num">${R.climate ? R.climate.st.temp.toFixed(0) : 27}°</b><span>${L('غرفة النوم', 'Bedroom')}</span></div><div><b class="num">${on}</b><span>${L('أضواء تعمل', 'Lights on')}</span></div><div><b>${S.lock.locked ? L('مقفل', 'Locked') : L('مفتوح', 'Open')}</b><span>${L('الباب', 'Door')}</span></div></div>
-    ${S.lock.guest ? `<div class="card2 bell">${icon('bell')} <b>${L('زائر عند الباب', 'Visitor at the door')}</b> <button class="chip" data-a="rm" data-v="door">${L('افتح', 'Open')}</button></div>` : ''}
-    <div class="lbl">${L('المشاهد', 'SCENES')}</div><div class="sc">${Object.entries(SCENES).map(([k, s]) => `<button data-a="rm" data-v="s:${k}">${icon(s.ic)}${esc(s.n[LANG === 'ar' ? 0 : 1])}</button>`).join('')}</div>
-    <div class="lbl">${L('الصالة', 'LIVING ROOM')}</div><div class="tl">
-      ${fx.map(f => t('t:' + f, FIX_ICON[f], fixName(f), st[f].on ? st[f].bri + '%' : L('مطفأة', 'Off'), st[f].on)).join('')}
-      ${r.has('window') ? t('cur', 'curtain', L('الستارة', 'Blind'), st.curtain > 50 ? L('مغلقة', 'Closed') : L('مفتوحة', 'Open'), st.curtain < 50) : ''}</div>
-    ${fx.length ? `<div class="card2"><b>${L('سطوع الإضاءة', 'Brightness')}</b><input type="range" min="1" max="100" value="${st[fx[0]].bri}" data-i="rmbri" aria-label="${L('السطوع', 'Brightness')}"></div>` : ''}
-    ${r.has('window') ? `<div class="card2"><b>${L('الستارة', 'Blind')}</b><input type="range" min="0" max="100" step="5" value="${st.curtain}" data-i="rmcur" aria-label="${L('الستارة', 'Blind')}"></div>` : ''}
-    ${other ? `<div class="lbl">${L('غرف أخرى', 'OTHER ROOMS')}</div><div class="tl">${other}</div>` : ''}
-    <div class="card2"><b>${L('وقت اليوم', 'Time of day')}</b>${chips([[13, L('نهار', 'Day')], [18.5, L('غروب', 'Sunset')], [21, L('ليل', 'Night')]], st.time, 'rmtime')}</div>`;
+// change a device in the room shown on the phone, and in that room's own section
+function phApply(patch) {
+  const rm = phRoom(); R.remote.set(patch);
+  if (rm.key === 'remote') { keep('remote', R.remote); return; }
+  const main = R[rm.key]; if (main) { main.set(patch); keep(rm.key, main); } else S[rm.key].room = JSON.parse(JSON.stringify(R.remote.st));
+  if (rm.key === 'mixpad') { const d = $('#mpdev'); if (d) d.innerHTML = mpScreen(); wallPanel(); }
+  if (rm.key === 'climate') dockClimate(); if (rm.key === 'curtain') dockCurtain();
 }
-function rmAct(v) {
-  const r = R.remote; if (!r) return; const st = r.st;
-  if (v.startsWith('s:')) runScene(r, v.slice(2));
-  else if (v.startsWith('t:')) { const f = v.slice(2); if (st[f]) r.set({ [f]: { on: !st[f].on } }); }
-  else if (v === 'cur') r.set({ curtain: st.curtain > 50 ? 0 : 100 });
-  else if (v === 'door') return lockAct(S.lock.locked ? 'remote' : 'lock');
-  else if (v === 'bac') return clAct('acpow');
-  else if (v === 'btv') return mpAct('tv');
-  else if (v === 'bcur') return curAct(R.curtain.st.curtain > 50 ? 'open' : 'close');
-  keep('remote', r); panelRemote();
+function phDevices() {
+  const rm = phRoom(), r = R.remote; if (!r) return [];
+  if (rm.key === 'lock') return [{ id: 'lock', ic: 'lock', n: tx(lockProd()?.name) || L('القفل الذكي', 'Smart lock'), s: S.lock.locked ? L('مقفل', 'Locked') : L('مفتوح', 'Unlocked'), on: !S.lock.locked, pw: false },
+    { id: 'cam', ic: 'camera', n: L('جرس الباب', 'Doorbell'), s: S.lock.guest ? L('زائر عند الباب', 'Visitor at the door') : L('لا أحد', 'No one'), on: S.lock.guest, pw: false }];
+  const st = r.st, list = r.fixtures().map(f => ({ id: 'l:' + f, ic: FIX_ICON[f], n: fixName(f), s: st[f].on ? st[f].bri + '%' : L('مطفأ', 'Off'), on: st[f].on, pw: true }));
+  if (r.has('window')) { const op = 100 - Math.round(st.curtain); list.push({ id: 'cur', ic: 'curtain', n: rm.id === 'living' ? L('الستارة الرول', 'Roller blind') : L('الستارة', 'Curtain'), s: op >= 99 ? L('مفتوحة', 'Open') : op <= 1 ? L('مغلقة', 'Closed') : L(`مفتوحة ${op}%`, `${op}% open`), on: op > 1, pw: true }); }
+  if (r.has('ac')) list.push({ id: 'ac', ic: 'ac', n: L('المكيّف', 'Air conditioner'), s: st.ac.on ? `${modeName(st.ac.mode)} · ${st.ac.set}°` : L('مطفأ', 'Off'), on: st.ac.on, pw: true });
+  if (r.has('tv')) list.push({ id: 'tv', ic: 'tv', n: L('التلفزيون', 'TV'), s: st.tv.on ? (LANG === 'ar' ? TV_CHANNELS[st.tv.ch].ar : TV_CHANNELS[st.tv.ch].en) : L('مطفأ', 'Off'), on: st.tv.on, pw: true });
+  if (rm.key === 'climate') list.push({ id: 'th', ic: 'thermo', n: L('الحرارة والرطوبة', 'Temperature'), s: `${(R.climate?.st.temp ?? st.temp).toFixed(1)}° · 48%`, on: true, pw: false });
+  return list;
+}
+const modeName = m => ({ cool: L('تبريد', 'Cool'), heat: L('تدفئة', 'Heat'), dry: L('تجفيف', 'Dry'), fan: L('مروحة', 'Fan') }[m] || m);
+const clock = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+function panelRemote() {
+  const host = $('#pn-remote'); if (!host || !R.remote) return; const rm = phRoom();
+  if (rm.key === 'lock') { R.remote.door(!S.lock.locked); R.remote.guest(S.lock.guest); }
+  else if (rm.key !== 'remote' && R[rm.key]) { const m = R[rm.key].st; R.remote.set({ ...['down', 'spot', 'strip', 'track', 'pendant', 'washer'].reduce((o, f) => (o[f] = { ...m[f] }, o), {}), curtain: m.curtain, sheer: m.sheer, tv: { ...m.tv }, ac: { ...m.ac }, time: m.time }); }
+  if (rm.key === 'mixpad') wallPanel();
+  const bar = `<div class="sbar"><b class="num">${clock()}</b><span>●●● ᯤ ▮</span></div>`;
+  host.innerHTML = bar + (PH.dev ? phDevice() : phHome());
+  const pg = host.querySelector('.pg'); if (pg && PH.enter) { pg.classList.add('enter'); PH.enter = false; }
+}
+function phHome() {
+  const rm = phRoom(), devs = phDevices(), lightsOn = ROOMS.filter(x => x.key !== 'lock').reduce((n, x) => { const st = x.key === 'remote' ? S.remote.room : (R[x.key]?.st || S[x.key]?.room); return n + ['down', 'spot', 'strip', 'track', 'pendant', 'washer'].filter(f => st?.[f]?.on).length; }, 0);
+  return `<div class="pg home">
+    <div class="ahead"><h4>${L('منزلي', 'My Home')} <small>▾</small></h4><span class="aplus">＋</span></div>
+    <div class="env"><div><b class="num">${R.climate ? R.climate.st.temp.toFixed(1) : '27.0'}°</b><span>${L('داخل البيت', 'Indoor')}</span></div><div><b class="num">${lightsOn}</b><span>${L('أضواء تعمل', 'Lights on')}</span></div><div><b>${S.lock.locked ? L('مقفل', 'Locked') : L('مفتوح', 'Open')}</b><span>${L('الباب', 'Door')}</span></div></div>
+    ${S.lock.guest ? `<button class="card2 bell" data-a="ph" data-v="open:cam">${icon('bell')} <b>${L('زائر عند الباب', 'Visitor at the door')}</b><span class="chip">${L('عرض', 'View')}</span></button>` : ''}
+    <div class="lbl">${L('المشاهد', 'Scenes')}</div><div class="scr-x">${Object.entries(SCENES).map(([k, sc]) => `<button class="scn" data-a="ph" data-v="scene:${k}">${icon(sc.ic)}<span>${esc(sc.n[LANG === 'ar' ? 0 : 1])}</span></button>`).join('')}</div>
+    <div class="rooms">${ROOMS.map(x => `<button class="${x.id === rm.id ? 'on' : ''}" data-a="ph" data-v="room:${x.id}">${esc(L(...x.n))}</button>`).join('')}</div>
+    <div class="dgrid">${devs.map(d => `<div class="dcard ${d.on ? 'on' : ''}" data-a="ph" data-v="open:${d.id}" role="button" tabindex="0" aria-label="${esc(d.n)}">
+      <span class="dic">${icon(d.ic)}</span>${d.pw ? `<button class="dpw ${d.on ? 'on' : ''}" data-a="ph" data-v="pow:${d.id}" aria-label="${L('تشغيل أو إيقاف', 'On or off')}">${icon('power')}</button>` : ''}
+      <b>${esc(d.n)}</b><small>${esc(d.s)}</small></div>`).join('')}</div>
+    <p class="ahint">${L('اضغط على أي جهاز لفتح شاشة التحكم به', 'Tap any device to open its controls')}</p></div>
+    <nav class="tabs"><span class="on">${icon('home')}${L('الرئيسية', 'Home')}</span><span>${icon('spark')}${L('المشاهد', 'Scenes')}</span><span>${icon('shield')}${L('الأمان', 'Security')}</span><span>${icon('user')}${L('حسابي', 'Me')}</span></nav>`;
+}
+function phDevice() {
+  const id = PH.dev, rm = phRoom(), r = R.remote, st = r.st, d = phDevices().find(x => x.id === id) || { n: '', on: false };
+  const top = (pw) => `<div class="dtop"><button class="back" data-a="ph" data-v="back" aria-label="${L('رجوع', 'Back')}">‹</button><div><b>${esc(d.n)}</b><small>${esc(L(...rm.n))}</small></div>${pw ? `<button class="bigpw ${d.on ? 'on' : ''}" data-a="ph" data-v="pow:${id}" aria-label="${L('تشغيل أو إيقاف', 'On or off')}">${icon('power')}</button>` : '<span></span>'}</div>`;
+  if (id.startsWith('l:')) {
+    const f = id.slice(2), Lt = st[f], col = fixtureHasColour(f);
+    return `<div class="pg dev">${top(true)}
+      <div class="vwrap"><div class="vbar ${Lt.on ? '' : 'off'}" data-drag="bri" style="--v:${Lt.on ? Lt.bri : 0}%;--lc:${Lt.rgb || kelvinCss(Lt.cct)}"><i></i><span class="num" id="ph-bri">${Lt.on ? Lt.bri + '%' : L('مطفأ', 'Off')}</span></div></div>
+      <div class="dsec"><label>${L('حرارة اللون', 'Colour temperature')} <b class="num" id="ph-cct">${Lt.cct}K</b></label><input class="cctbar" type="range" min="2700" max="6500" step="100" value="${Lt.cct}" data-i="phcct" aria-label="${L('حرارة اللون', 'Colour temperature')}"></div>
+      ${col ? `<div class="dsec"><label>${L('اللون', 'Colour')}</label><div class="sws">${COLORS.map(c => `<button class="swatch ${Lt.rgb === c ? 'on' : ''}" style="background:${c}" data-a="ph" data-v="rgb:${c}" aria-label="${c}"></button>`).join('')}<button class="swatch ${!Lt.rgb ? 'on' : ''}" style="background:linear-gradient(90deg,#ffb46b,#fff,#cfe2ff)" data-a="ph" data-v="rgb:" aria-label="${L('أبيض', 'White')}"></button></div></div>` : ''}
+      <div class="dsec"><label>${L('أوضاع جاهزة', 'Modes')}</label><div class="modes">${[['relax', 'moon', L('استرخاء', 'Relax')], ['read', 'bulb', L('قراءة', 'Reading')], ['focus', 'sun', L('تركيز', 'Focus')], ['night', 'moon', L('ليلي', 'Night')]].map(([k, ic, n]) => `<button data-a="ph" data-v="pre:${k}">${icon(ic)}<span>${n}</span></button>`).join('')}</div></div></div>`;
+  }
+  if (id === 'cur') {
+    const op = 100 - Math.round(st.curtain), blind = (rm.zone = r.zones.find(z => z.t === 'window'))?.m === 'blind';
+    return `<div class="pg dev">${top(false)}
+      <div class="curvis ${blind ? 'blind' : ''}" style="--c:${(rm.zone && rm.zone.c) || '#8a7c70'};--k:${st.curtain / 100}"><i class="sky"></i><i class="l"></i><i class="r"></i><span class="num" id="ph-cur">${op}%</span></div>
+      <div class="dsec"><label>${L('نسبة الفتح', 'Open')}</label><input type="range" min="0" max="100" step="1" value="${op}" data-i="phcur" aria-label="${L('نسبة الفتح', 'Open')}"></div>
+      <div class="cbtns"><button data-a="ph" data-v="cur:open">${L('فتح', 'Open')}</button><button data-a="ph" data-v="cur:stop">${L('إيقاف', 'Pause')}</button><button data-a="ph" data-v="cur:close">${L('إغلاق', 'Close')}</button></div>
+      <div class="dsec"><label>${L('أتمتة', 'Automation')}</label><div class="modes two"><button data-a="ph" data-v="cur:open">${icon('sun')}<span>${L('تُفتح مع الشروق', 'Open at sunrise')}</span></button><button data-a="ph" data-v="cur:close">${icon('moon')}<span>${L('تُغلق مع الغروب', 'Close at sunset')}</span></button></div></div></div>`;
+  }
+  if (id === 'ac') {
+    const a = st.ac, room = (R.climate?.st.temp ?? st.temp), k = (a.set - 16) / 14;
+    return `<div class="pg dev">${top(true)}
+      <div class="dial ${a.on ? '' : 'off'} m-${a.mode}" style="--k:${k}"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="80" class="track"/><circle cx="100" cy="100" r="80" class="prog" pathLength="100" style="stroke-dasharray:${(k * 75).toFixed(1)} 100"/></svg>
+        <div><small>${a.on ? modeName(a.mode) : L('مطفأ', 'Off')}</small><b class="num">${a.set}<sup>°C</sup></b><small>${L('الغرفة', 'Room')} <span class="num" id="ph-room">${room.toFixed(1)}°</span></small></div></div>
+      <div class="cbtns"><button data-a="ph" data-v="set:-1" aria-label="-">−</button><button data-a="ph" data-v="set:1" aria-label="+">+</button></div>
+      <div class="dsec"><label>${L('الوضع', 'Mode')}</label><div class="modes">${[['cool', 'ac'], ['heat', 'sun'], ['dry', 'leaf'], ['fan', 'fan']].map(([m, ic]) => `<button class="${a.mode === m ? 'on' : ''}" data-a="ph" data-v="mode:${m}">${icon(ic)}<span>${modeName(m)}</span></button>`).join('')}</div></div>
+      <div class="dsec"><label>${L('سرعة المروحة', 'Fan speed')}</label><div class="seg">${[[1, L('هادئة', 'Low')], [2, L('متوسطة', 'Mid')], [3, L('قوية', 'High')]].map(([v, n]) => `<button class="${a.fan === v ? 'on' : ''}" data-a="ph" data-v="fan:${v}">${n}</button>`).join('')}</div></div>
+      <div class="dsec row2"><label>${L('تأرجح الهواء', 'Swing')}</label>${sw(a.swing, 'ph', 'swing')}</div></div>`;
+  }
+  if (id === 'tv') {
+    const t = st.tv;
+    return `<div class="pg dev">${top(true)}
+      <div class="remote2"><div class="seg">${TV_CHANNELS.map((c, i) => `<button class="${t.ch === i && t.on ? 'on' : ''}" data-a="ph" data-v="ch:${i}">${esc(LANG === 'ar' ? c.ar : c.en)}</button>`).join('')}</div>
+        <div class="dpad"><button data-a="ph" data-v="chs:-1" aria-label="${L('القناة السابقة', 'Previous channel')}">▲</button><button data-a="ph" data-v="vol:-5" aria-label="-">◀</button><span>OK</span><button data-a="ph" data-v="vol:5" aria-label="+">▶</button><button data-a="ph" data-v="chs:1" aria-label="${L('القناة التالية', 'Next channel')}">▼</button></div>
+        <div class="dsec row2"><label>${L('الصوت', 'Volume')}</label><b class="num">${t.vol}</b></div></div></div>`;
+  }
+  if (id === 'th') { const room = (R.climate?.st.temp ?? st.temp);
+    return `<div class="pg dev">${top(false)}<div class="dial off"><div><small>${L('الحرارة الآن', 'Now')}</small><b class="num">${room.toFixed(1)}<sup>°C</sup></b><small>${L('الرطوبة', 'Humidity')} 48%</small></div></div>
+      <p class="ahint">${L('عند تجاوز 26° يشغّل المكيّف تلقائياً.', 'Above 26° it switches the AC on automatically.')}</p></div>`; }
+  if (id === 'lock' || id === 'cam') {
+    const out = sceneOf('lock').outside, s = S.lock;
+    return `<div class="pg dev">${top(false)}
+      ${s.guest || id === 'cam' ? `<div class="camv" style="background-image:url('${esc(out)}')">${s.guest ? '<i class="who"></i>' : ''}<em>● LIVE</em></div>` : ''}
+      <button class="lockbig ${s.locked ? '' : 'open'}" data-a="ph" data-v="${s.locked ? 'unlock' : 'lock'}">${icon(s.locked ? 'lock' : 'key')}<b>${s.locked ? L('اضغط للفتح', 'Tap to unlock') : L('اضغط للقفل', 'Tap to lock')}</b><small>${s.locked ? L('الباب مقفل', 'The door is locked') : L('الباب مفتوح', 'The door is open')}</small></button>
+      <div class="modes two"><button data-a="ph" data-v="otp">${icon('key')}<span>${L('رمز لمرة واحدة', 'One-time code')}</span></button><button data-a="ph" data-v="bell">${icon('bell')}<span>${L('تجربة الجرس', 'Test the bell')}</span></button></div>
+      ${s.otp ? `<p class="ahint">${L('رمز الزائر', 'Visitor code')}: <b class="num">${s.otp}</b></p>` : ''}
+      <div class="dsec"><label>${L('سجل الدخول', 'History')}</label><div class="log">${s.log.slice(0, 6).map(l => `<div><i>${l.t}</i>${esc(LANG === 'ar' ? l.ar : l.en)}</div>`).join('') || `<div>${L('لا توجد أحداث بعد', 'No events yet')}</div>`}</div></div></div>`;
+  }
+  return phHome();
+}
+const kelvinCss = k => { const c = k <= 3000 ? [255, 190, 120] : k <= 4200 ? [255, 228, 196] : k <= 5200 ? [255, 246, 236] : [214, 230, 255]; return `rgb(${c})`; };
+function phAct(v) {
+  const r = R.remote; if (!r) return; const st = r.st, [k, a] = [v.split(':')[0], v.slice(v.indexOf(':') + 1)];
+  if (k === 'room') { PH.at = a; PH.dev = null; mountRemote(); return; }
+  if (k === 'open') { if (a) { PH.dev = a; PH.enter = true; } return panelRemote(); }
+  if (k === 'back') { PH.dev = null; return panelRemote(); }
+  if (k === 'scene') { phApply(SCENES[a].s()); }
+  if (k === 'pow') {
+    if (a.startsWith('l:')) { const f = a.slice(2); phApply({ [f]: { on: !st[f].on } }); }
+    if (a === 'cur') phApply({ curtain: st.curtain > 50 ? 0 : 100 });
+    if (a === 'ac') phApply({ ac: { on: !st.ac.on } }); if (a === 'tv') phApply({ tv: { on: !st.tv.on } });
+  }
+  const f = PH.dev && PH.dev.startsWith('l:') ? PH.dev.slice(2) : null;
+  if (k === 'rgb' && f) phApply({ [f]: { on: true, rgb: a || null } });
+  if (k === 'pre' && f) { const P = { relax: [35, 2700], read: [85, 4000], focus: [100, 5200], night: [8, 2700] }[a]; phApply({ [f]: { on: true, bri: P[0], cct: P[1], rgb: null } }); }
+  if (k === 'cur') phApply({ curtain: a === 'open' ? 0 : a === 'close' ? 100 : Math.round(r.pos()) });
+  if (k === 'set') phApply({ ac: { on: true, set: clamp(st.ac.set + +a, 16, 30) } });
+  if (k === 'mode') phApply({ ac: { on: true, mode: a } }); if (k === 'fan') phApply({ ac: { fan: +a } }); if (k === 'swing') phApply({ ac: { swing: !st.ac.swing } });
+  if (k === 'ch') phApply({ tv: { on: true, ch: +a } }); if (k === 'chs') phApply({ tv: { on: true, ch: (st.tv.ch + +a + TV_CHANNELS.length) % TV_CHANNELS.length } }); if (k === 'vol') phApply({ tv: { vol: clamp(st.tv.vol + +a, 0, 100) } });
+  if (k === 'unlock') return lockAct('remote'); if (k === 'lock') return lockAct('lock'); if (k === 'otp') return lockAct('otp'); if (k === 'bell') return lockAct('bell');
+  panelRemote();
+}
+// the tall brightness bar: drag up and down, like the app
+let vdrag = null;
+document.addEventListener('pointerdown', e => { const b = e.target.closest?.('.vbar[data-drag]'); if (!b) return; vdrag = b; b.setPointerCapture?.(e.pointerId); vmove(e); });
+document.addEventListener('pointermove', e => { if (vdrag) vmove(e); });
+document.addEventListener('pointerup', () => { if (vdrag) { vdrag = null; panelRemote(); } });
+function vmove(e) {
+  const r = vdrag.getBoundingClientRect(), v = clamp(Math.round((r.bottom - e.clientY) / r.height * 100), 1, 100), f = PH.dev?.slice(2); if (!f) return;
+  vdrag.style.setProperty('--v', v + '%'); vdrag.classList.remove('off'); const t = $('#ph-bri'); if (t) t.textContent = v + '%';
+  phApply({ [f]: { on: true, bri: v } });
 }
 
 // ---------- projects gallery ----------
@@ -425,7 +539,7 @@ const ACT = {
   cact: v => curAct(v), csheer: () => { R.curtain.set({ sheer: R.curtain.st.sheer > 50 ? 0 : 100 }); keep('curtain', R.curtain); dockCurtain(); }, cauto: v => curAuto(v),
   clights: () => { const r = R.curtain, on = !r.fixtures().some(f => r.st[f].on); r.fixtures().forEach(f => r.set({ [f]: { on } })); keep('curtain', r); dockCurtain(); },
   acpow: () => clAct('acpow'), acset: v => clAct('acset', v), acmode: v => clAct('acmode', v), acfan: v => clAct('acfan', v), acswing: () => clAct('acswing'),
-  rm: v => rmAct(v), rmtime: v => { R.remote.set({ time: +v }); keep('remote', R.remote); panelRemote(); },
+  ph: v => phAct(v),
   proj: v => openProject(v), gal: v => { gal.i += +v + 100; drawModal(); }, mclose: () => { const m = $('#modal'); m.hidden = true; m.innerHTML = ''; },
   criflick: () => { S.cri.flicker = !S.cri.flicker; R.cri.flicker(S.cri.flicker); const b = document.querySelector('[data-a=criflick]'); if (b) { b.classList.toggle('on', S.cri.flicker); b.setAttribute('aria-pressed', S.cri.flicker); } },
   crijump: v => { const from = S.cri.x, to = +v, t0 = performance.now(); const step = n => { const k = Math.min(1, (n - t0) / 600), e = 1 - Math.pow(1 - k, 3); R.cri.split(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); },
@@ -441,12 +555,12 @@ const INP = {
   cpos: v => { R.curtain.set({ curtain: +v }); keep('curtain', R.curtain); $('#v-cpos').textContent = v + '%'; },
   ctime: v => { R.curtain.set({ time: +v }); keep('curtain', R.curtain); $('#v-ctime').textContent = fmtT(+v); },
   crix: v => { R.cri.split(+v); },
-  rmbri: v => { const f = R.remote.fixtures()[0]; if (f) R.remote.set({ [f]: { on: true, bri: +v } }); keep('remote', R.remote); },
-  rmcur: v => { R.remote.set({ curtain: +v }); keep('remote', R.remote); },
+  phcct: v => { const f = PH.dev?.slice(2); if (!f) return; phApply({ [f]: { on: true, cct: +v, rgb: null } }); const t = $('#ph-cct'); if (t) t.textContent = v + 'K'; },
+  phcur: v => { phApply({ curtain: 100 - +v }); const t = $('#ph-cur'); if (t) t.textContent = v + '%'; const c = $('.curvis'); if (c) c.style.setProperty('--k', (100 - +v) / 100); },
 };
 document.addEventListener('input', e => { const i = e.target.dataset?.i; if (i && INP[i]) INP[i](e.target.value); });
-document.addEventListener('change', e => { const i = e.target.dataset?.i; if (i === 'rmbri' || i === 'rmcur') panelRemote(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal')?.hidden) ACT.mclose(); });
+document.addEventListener('change', e => { const i = e.target.dataset?.i; if (i === 'phcct' || i === 'phcur') panelRemote(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal')?.hidden) ACT.mclose(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('.dcard')) { e.preventDefault(); e.target.click(); } });
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { const b = document.querySelector('[data-a=theme]'); if (b && !THEME) b.innerHTML = icon(isDark() ? 'sun' : 'moon'); });
 
 // ---------- start ----------

@@ -367,3 +367,101 @@ input[type=range].cct { accent-color: #f3c37a; }
 .lockpad2 .k::after { content: ""; position: absolute; inset: -20%; border-radius: 50%; background: radial-gradient(circle, rgba(170, 215, 255, .95), rgba(120, 190, 255, .35) 45%, transparent 70%); opacity: 0; transition: opacity .35s; }
 .lockpad2 .k:hover::after { opacity: .45; } .lockpad2 .k.hit::after, .lockpad2 .k:active::after { opacity: 1; transition: none; }
 .lockpad2 .k:focus-visible { outline: 2px solid var(--accent); }
+
+/* ---------- the phone app (in the style of ORVIBO Home) ---------- */
+.phone .scr.app { position: relative; padding: 0; display: flex; flex-direction: column; overflow: hidden; --ap: #ff7a1a; --ap-soft: rgba(255, 122, 26, .12); }
+.app .sbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 22px 4px; font-size: 12px; color: var(--ink); direction: ltr; flex: none; }
+.app .sbar span { letter-spacing: 1px; font-size: 9px; opacity: .7; }
+.app .pg { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 14px 14px; scrollbar-width: none; }
+.app .pg::-webkit-scrollbar { display: none; }
+.app .pg.enter { animation: pgin .32s cubic-bezier(.2, .7, .2, 1); }
+[dir="rtl"] .app .pg.enter { animation-name: pgin-rtl; }
+@keyframes pgin { from { transform: translateX(40%); opacity: 0; } }
+@keyframes pgin-rtl { from { transform: translateX(-40%); opacity: 0; } }
+.app .ahead { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 10px; }
+.app .ahead h4 { margin: 0; font: 600 21px var(--display); } .app .ahead h4 small { font-size: 12px; color: var(--muted); }
+.app .aplus { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--phone-card); border: 1px solid var(--line); font-size: 16px; }
+.app .env { background: linear-gradient(135deg, #ff8a3d, #ffb36b); border-radius: 18px; }
+.app .lbl { margin: 14px 2px 8px; font-size: 13px; color: var(--ink); letter-spacing: 0; }
+.app .scr-x { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.app .scr-x::-webkit-scrollbar { display: none; }
+.app .scn { flex: none; width: 84px; padding: 10px 6px; border-radius: 16px; background: var(--phone-card); border: 1px solid var(--line); display: grid; justify-items: center; gap: 4px; font-size: 11.5px; }
+.app .scn .ic { color: var(--ap); width: 20px; height: 20px; } .app .scn:active { background: var(--ap-soft); }
+.app .rooms { display: flex; gap: 14px; margin: 16px 2px 10px; overflow-x: auto; scrollbar-width: none; }
+.app .rooms::-webkit-scrollbar { display: none; }
+.app .rooms button { flex: none; font-size: 14px; color: var(--muted); padding: 2px 0 6px; border-bottom: 2px solid transparent; }
+.app .rooms button.on { color: var(--ink); font-weight: 700; border-color: var(--ap); }
+.app .dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.app .dcard { position: relative; text-align: start; background: var(--phone-card); border: 1px solid var(--line); border-radius: 18px; padding: 12px; display: grid; gap: 2px; cursor: pointer; transition: transform .12s, box-shadow .2s; min-height: 104px; align-content: start; }
+.app .dcard:active { transform: scale(.97); }
+.app .dcard:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, .08); }
+.app .dcard .dic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; background: var(--bg-2); color: var(--muted); margin-bottom: 8px; }
+.app .dcard.on .dic { background: var(--ap-soft); color: var(--ap); }
+.app .dcard b { font-size: 13px; line-height: 1.25; } .app .dcard small { font-size: 11.5px; color: var(--muted); }
+.app .dpw { position: absolute; top: 10px; inset-inline-end: 10px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-2); color: var(--muted); }
+.app .dpw .ic { width: 16px; height: 16px; } .app .dpw.on { background: var(--ap); color: #fff; }
+.app .ahint { text-align: center; color: var(--muted); font-size: 11.5px; margin: 12px 0 4px; }
+.app .tabs { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); background: var(--phone-card); padding: 6px 4px 10px; }
+.app .tabs span { display: grid; justify-items: center; gap: 2px; font-size: 10px; color: var(--muted); }
+.app .tabs span .ic { width: 20px; height: 20px; } .app .tabs .on { color: var(--ap); }
+.app .card2.bell { width: 100%; margin-top: 10px; }
+/* a device's control screen */
+.app .dtop { display: grid; grid-template-columns: 34px 1fr 40px; align-items: center; gap: 6px; margin: 2px 0 12px; text-align: center; }
+.app .dtop b { display: block; font-size: 15px; } .app .dtop small { color: var(--muted); font-size: 11.5px; }
+.app .back { width: 34px; height: 34px; border-radius: 50%; font-size: 24px; line-height: 1; background: var(--phone-card); border: 1px solid var(--line); }
+[dir="rtl"] .app .back { transform: scaleX(-1); }
+.app .bigpw { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--bg-2); color: var(--muted); }
+.app .bigpw.on { background: var(--ap); color: #fff; box-shadow: 0 4px 12px rgba(255, 122, 26, .4); }
+.app .vwrap { display: grid; place-items: center; padding: 6px 0 4px; }
+.app .vbar { position: relative; width: 112px; height: 230px; border-radius: 30px; background: var(--bg-2); overflow: hidden; cursor: ns-resize; touch-action: none; box-shadow: inset 0 0 0 1px var(--line); }
+.app .vbar i { position: absolute; left: 0; right: 0; bottom: 0; height: var(--v); background: linear-gradient(180deg, color-mix(in srgb, var(--lc) 70%, #fff), var(--lc)); transition: height .12s; }
+.app .vbar span { position: absolute; left: 0; right: 0; top: 14px; text-align: center; font: 500 22px var(--display); color: var(--ink); mix-blend-mode: normal; }
+.app .vbar.off i { height: 0; }
+.app .dsec { margin-top: 14px; display: grid; gap: 7px; }
+.app .dsec > label { font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; }
+.app .dsec > label b { color: var(--ink); }
+.app .dsec.row2 { display: flex; justify-content: space-between; align-items: center; }
+.app .dsec input[type=range] { width: 100%; accent-color: var(--ap); }
+.app .cctbar { -webkit-appearance: none; appearance: none; height: 12px; border-radius: 8px; background: linear-gradient(90deg, #ffb46b, #fff3e0, #d6e6ff); box-shadow: inset 0 0 0 1px var(--line); }
+.app .cctbar::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.app .cctbar::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.app .sws { display: flex; flex-wrap: wrap; gap: 8px; } .app .sws .swatch { width: 26px; height: 26px; }
+.app .modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; } .app .modes.two { grid-template-columns: 1fr 1fr; margin-top: 12px; }
+.app .modes button { background: var(--phone-card); border: 1px solid var(--line); border-radius: 14px; padding: 9px 2px; display: grid; justify-items: center; gap: 3px; font-size: 11px; }
+.app .modes button .ic { width: 18px; height: 18px; color: var(--muted); }
+.app .modes button.on { border-color: var(--ap); background: var(--ap-soft); } .app .modes button.on .ic { color: var(--ap); }
+.app .seg { display: flex; flex-wrap: wrap; gap: 4px; background: var(--bg-2); border-radius: 12px; padding: 3px; }
+.app .seg button { flex: 1; padding: 7px 6px; border-radius: 9px; font-size: 12px; white-space: nowrap; }
+.app .seg button.on { background: var(--phone-card); font-weight: 700; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.app .cbtns { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.app .cbtns button { flex: 1; max-width: 100px; padding: 10px; border-radius: 14px; background: var(--phone-card); border: 1px solid var(--line); font-weight: 600; font-size: 15px; }
+.app .cbtns button:active { background: var(--ap-soft); }
+.app .curvis { position: relative; height: 170px; border-radius: 16px; overflow: hidden; background: #cfe3f5; box-shadow: inset 0 0 0 6px #e9e6e0; }
+.app .curvis .sky { position: absolute; inset: 0; background: linear-gradient(#bcd8f2, #e9f2fb 70%, #d8e6c9); }
+.app .curvis .l, .app .curvis .r { position: absolute; top: 0; bottom: 0; width: calc(8% + 42% * var(--k)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--c) 75%, #000) 0 3px, var(--c) 3px 10px, color-mix(in srgb, var(--c) 85%, #fff) 10px 13px); transition: width .25s; }
+.app .curvis .l { left: 0; } .app .curvis .r { right: 0; }
+.app .curvis.blind .l { width: auto; left: 0; right: 0; height: calc(4% + 96% * var(--k)); bottom: auto; background: repeating-linear-gradient(180deg, var(--c) 0 9px, color-mix(in srgb, var(--c) 85%, #000) 9px 10px); }
+.app .curvis.blind .r { display: none; }
+.app .curvis span { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); background: rgba(0, 0, 0, .5); color: #fff; border-radius: 10px; padding: 2px 10px; font-size: 13px; }
+.app .dial { position: relative; width: 200px; height: 200px; margin: 0 auto; display: grid; place-items: center; }
+.app .dial svg { position: absolute; inset: 0; transform: rotate(135deg); }
+.app .dial .track, .app .dial .prog { fill: none; stroke-width: 12; stroke-linecap: round; }
+.app .dial .track { stroke: var(--bg-2); stroke-dasharray: 75 100; }
+.app .dial .prog { stroke: #3b9bff; transition: stroke-dasharray .3s; }
+.app .dial.m-heat .prog { stroke: #ff7a1a; } .app .dial.m-dry .prog { stroke: #2ec4b6; } .app .dial.m-fan .prog { stroke: #8a94a6; }
+.app .dial.off .prog { stroke: var(--line); }
+.app .dial > div { display: grid; justify-items: center; text-align: center; }
+.app .dial b { font: 300 52px var(--display); line-height: 1; } .app .dial sup { font-size: 16px; } .app .dial small { color: var(--muted); font-size: 12px; }
+.app .remote2 { display: grid; gap: 14px; }
+.app .dpad { width: 170px; height: 170px; margin: 0 auto; border-radius: 50%; background: var(--phone-card); border: 1px solid var(--line); display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); place-items: center; box-shadow: 0 6px 16px rgba(0, 0, 0, .06); }
+.app .dpad button { width: 44px; height: 44px; border-radius: 50%; color: var(--muted); }
+.app .dpad button:active { background: var(--ap-soft); color: var(--ap); }
+.app .dpad > :nth-child(1) { grid-area: 1 / 2; } .app .dpad > :nth-child(2) { grid-area: 2 / 1; } .app .dpad > :nth-child(3) { grid-area: 2 / 2; font-weight: 700; font-size: 13px; } .app .dpad > :nth-child(4) { grid-area: 2 / 3; } .app .dpad > :nth-child(5) { grid-area: 3 / 2; }
+.app .camv { position: relative; height: 150px; border-radius: 16px; background: #273040 center 65% / cover; overflow: hidden; margin-bottom: 12px; }
+.app .camv .who { position: absolute; left: 40%; bottom: 0; width: 22%; height: 60%; background: radial-gradient(circle at 50% 18%, #1b1f26 0 16%, transparent 17%), radial-gradient(ellipse at 50% 100%, #1b1f26 0 46%, transparent 47%); }
+.app .camv em { position: absolute; top: 8px; inset-inline-start: 10px; color: #fff; font-style: normal; font-size: 11px; background: rgba(220, 40, 40, .85); padding: 1px 8px; border-radius: 8px; }
+.app .lockbig { width: 100%; display: grid; justify-items: center; gap: 4px; padding: 18px; border-radius: 22px; background: var(--phone-card); border: 1px solid var(--line); }
+.app .lockbig .ic { width: 54px; height: 54px; padding: 12px; border-radius: 50%; background: var(--ap); color: #fff; box-shadow: 0 6px 16px rgba(255, 122, 26, .4); }
+.app .lockbig.open .ic { background: #2ec46d; box-shadow: 0 6px 16px rgba(46, 196, 109, .4); }
+.app .lockbig b { font-size: 15px; margin-top: 6px; } .app .lockbig small { color: var(--muted); font-size: 12px; }
+.app .log { max-height: 140px; }

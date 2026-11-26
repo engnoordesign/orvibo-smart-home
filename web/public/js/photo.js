@@ -45,7 +45,12 @@ function loop(now) {
   for (const s of live) { if (!s.el.isConnected) { live.delete(s); io && io.unobserve(s.el); continue; } if (s.visible) busy = s.tick(dt, now / 1000) || busy; }
   raf = busy ? requestAnimationFrame(loop) : 0;
 }
-function register(el, scene) { scene.visible = !io; scene.el = el; el.__scene = scene; live.add(scene); io ? io.observe(el) : wake(); }
+function register(el, scene) {
+  // a scene rebuilt on the same element replaces the old one; it may already be on screen, so check now
+  if (el.__scene) live.delete(el.__scene);
+  const r = el.getBoundingClientRect(); scene.visible = !io || (r.bottom > -160 && r.top < innerHeight + 160);
+  scene.el = el; el.__scene = scene; live.add(scene); if (io) io.observe(el); wake();
+}
 
 // ---------- images and the bright-pixel masks of LED lines ----------
 const IMG = new Map();
